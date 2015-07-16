@@ -20,5 +20,6 @@ int init_db(const char *redis_ip, const char *redis_port);
 int init_slave(const vector<string> &slave_array ,unordered_map<string,int> &available_slave);
 
 //initialize the master server
-int init_master(const char *master_port);
+//wait for the clients' connections and queries from the administrator
+int init_master(const char *master_port, const char *status_port);
 #endif   // INIT_H

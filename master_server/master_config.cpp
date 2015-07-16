@@ -8,12 +8,16 @@
 #include  "master_config.h"
 
 void master_configure(char *redis_address, char *redis_port,
-		vector<string> &slave_array, char *slave_port, char *master_port)
+		vector<string> &slave_array, char *slave_port, char *master_port, 
+		char *slave_status_port, char *master_status_port)
 {
 	*redis_address = '\0';
 	*redis_port = '\0';
 	*slave_port = '\0';
 	*master_port = '\0';
+	*status_port = '\0';
+	*slave_status_port = '\0';
+	*master_status_port = '\0';
 	FILE *f_config = fopen(master_configure, "r");
 	if(f_config == NULL)
 		log_quit("master_configure: %s not exists", master_configure);
@@ -49,13 +53,26 @@ void master_configure(char *redis_address, char *redis_port,
 				log_quit("master_configure: SLAVE_PORT duplicate configured");
 			strcpy(slave_port, conf);
 		}
-		else if(strcpy(name, "MASTER_PORT") == 0)// configuration of the master port
+		else if(strcmp(name, "MASTER_PORT") == 0)// configuration of the master port
 		{
 			if(*master_port != '\0')
 				log_quit("master_configure: MASTER_PORT duplicate configured");
 			strcpy(master_port, conf);
 		}
+		else if(strcmp(name, "SLAVE_STATUS_PORT") == 0) // configuration of the slave status port
+		{
+			if(*slave_status_port != '\0')
+				log_quit("master_configure: SLAVE_STATUS_PORT duplicate configured");
+			strcpy(slave_status_port, conf);
+		}
+		else if(strcmp(name, "MASTER_STATUS_PORT") == 0) // configuration of the master status port
+		{
+			if(*slave_status_port != '\0')
+			   log_quit("master_configure: MASTER_STATUS_PORT duplicate configured");
+			strcpy(master_status_port, conf);
+		}
 		else // unknown configuration
 			log_quit("master_configure: unknown configure argument");
 	}
 }
+
