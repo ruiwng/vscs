@@ -1,0 +1,23 @@
+# compile
+CC=g++
+
+# header file directory
+INCLUDE=../include
+
+LIBCSD=libcsd.a
+
+# lib file directory
+LIBS=-L../lib -lcsd -lpthread
+
+# clean files
+CLEANFILES= *.o 
+
+CPPFLAGS= -ansi -std=c++0x -I$(INCLUDE) -Wall -D_REENTRANT -O2
+
+#compile option
+COMPILE.cpp= $(CC) $(CPPFLAGS) -c
+
+# link option
+LINK.c=$(CC) $(CFLAGS)
+
+
