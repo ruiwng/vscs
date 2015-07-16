@@ -100,7 +100,7 @@ int init_slave(const vector<string> &slave_array, const char *slave_port, unorde
 
 // initialize the master server 
 // listen to the client.
-int init_master(const char *master_port)
+int init_master_client(const char *master_port)
 {
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
@@ -112,7 +112,7 @@ int init_master(const char *master_port)
 	
 	int n;
 	if(( n = getaddrinfo(NULL, master_port, &hints, &result)) != 0)
-		log_quit("init_master: getaddrinfo %s", gai_strerror(n));
+		log_quit("init_master_client: getaddrinfo %s", gai_strerror(n));
 
 	int sock_master;
 	for(rp = rp->result; rp != NULL; rp = rp->ai_next)
@@ -126,10 +126,41 @@ int init_master(const char *master_port)
 	}
 	// init master failed
 	if(rp == NULL)
-		log_quit("init_master: init master unsuccessfully");
+		log_quit("init_master_client: init master unsuccessfully");
 	freeaddrinfo(result);
 	
 	return sock_master;
 }
 
+// initialize the status connection
+int init_master_status(const char *status_port)
+{
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
 
+	memset(&hints, 0, sizeof(addrinfo));
+	hints.ai_family = AF_UNSPEC; /* allow IPv4 and IPv6 */
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	int n;
+	if((n = getaddrinfo(NULL, status_port, &hints, &result)) != 0)
+		log_quit("init_master_status: getaddrinfo %s", gai_strerror(n));
+
+	int sock_status;
+	for(rp = rp->result; rp != NULL; rp = rp->ai_next)
+	{
+		sock_status = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if(sock_status == -1)
+			continue;
+		if(bind(sock_status, rp->ai_addr, rp->ai_addrlen) == 0)
+			break; /* success */
+		close(sock_status);
+	}
+	//init master status failed
+	if(rp == NULL)
+		log_quit("init_master_status: init status unsuccessfully");
+	freeaddrinfo(result);
+
+	return sock_status;
+}
