@@ -19,6 +19,7 @@
 #include  <netinet/in.h>
 #include  <arpa/inet.h> /* for inet_pton */
 #include  <pthread.h>   /* for pthread_create */
+#include  <netdb.h>    /* inclusion for getaddrinfo */
 
 #define   MAXLINE    4096  /* maximum length of a line */
 #define   MAXBUF     4096  /* maximum length of buffer */
@@ -26,7 +27,12 @@
 #define   USER_PREFIX  "user_"  /* the prefix of the user key */
 #define   SLAVE_PREFIX "slave_" /* the prefix of the slave server */
 
+const char *const master_configure = "/etc/vscs_master.conf"; // the configure file of the master server
+const char *const slave_configure = "/etc/vscs_slave.conf"; // the configure file of the slave server
+const char *const client_configure = "/etc/vscs_client.conf"; // the configure file of the client server
+
 const char *const REDIS_IP = "127.0.0.1"; // ip address of the redis
+
 const int REDIS_PORT = 6379;// port of the redis
 
 const int SLAVE_PORT = 8989; // the listen port of the slave server
