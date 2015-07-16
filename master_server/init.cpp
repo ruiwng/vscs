@@ -6,69 +6,130 @@
  ************************************************************************/
 
 #include  "csd.h"
-#include  <string>
-#include  <vector>
-using namespace std;
+#include  "init.h"
 
 //initialize the database server
-int init_db()
+//redis_ip stands for the ip address of the redis datababse server.
+//redis_port stands forthe port of the redis database server.
+//the return value is the file descriptor connect to the redis.
+int init_db(const char *redis_ip, const char *redis_port)
 {
 	//initialize the connection
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
+	
+	/* get the address of the database server */
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC; /* Allow IPv4 and IPv6 */
+	hints.ai_socktype = SOCK_STREAM;
+	
+	int n;
+	if((n = getaddrinfo(redis_ip, redis_port, &hints, &result)) != 0)
+		log_quit("init_db: getaddrinfo error %s",gai_strerror(s) );
+
 	int sock_db;
-	if((sock_db = socket(AF_IENT, SOCK_STREAM, 0)) < 0)
+	// traverse all the available address
+	for(rp = result; rp != NULL; rp = rp->ai_next)
 	{
-		log_sys("init_db: socket error");
-		return -1;
+		sock_db = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if(sock_fd == -1)
+			continue;
+
+		if(connect(sock_fd, rp->ai_addr, rp->ai_addrlen) != -1)
+			break; /* Success */
+
+		close(sock_fd);
 	}
-	sockaddr_in db_addr;
-	memset(&db_addr, 0, sizeof(db_addr));
-	db_addr.sin_family = AF_INET;
-	db_addr.sin_port = htons(REDIS_PORT);
-	if(inet_pton(AF_INET, REDIS_IP, &db_addr.sin_addr) < 0)
-	{
-		log_sys("init_db: inet_pton error");
-		return -1;
-	}
-	// try to connect to the database 
-	if(connect(sock_db, (struct sockaddr*)&db_addr, sizeof(db_addr)) < 0)
-	{
-		log_sys("init_db: connect error");
-		return -1;
-	}
-	log_msg("init database successfully");
+	if(rp == NULL)
+		//can't connect to the database server.
+		log_quit("init_db: connect to the database server unsuccessfully");
+
+	freeaddrinfo(result);
+
+	log_msg("init_db: connect to the datababse successfully");
+	
 	return sock_db;
 }
 
 //initilize the slave server
-void init_slave(const vector<string> &slave_array)
+//slave_array stands for all the available slave servers.
+int init_slave(const vector<string> &slave_array, const char *slave_port, unordered_map<string, int> &available_slave)
 {
 	int len = slave_array.size();
 	// traverse all the ip address and try to connect them.
+	int number = 0;
 	for(int i=0; i < len; ++i)
 	{
-		//initialize connection 
-		int sock_db;
-		if((sock_db = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		{
-			log_ret("init_slave: socket error");
-			continue;
-		}
-		sockaddr_in slave_addr;
-		memset(&slave_addr, 0, sizeof(slave_addr));
-		slave_addr.sin_family = AF_INET;
-		slave_addr.sin_port = htons(SLAVE_PORT);
+		struct addrinfo hints;
+		struct addrinfo *result, *rp;
 		
-		if(inet_pton(AF_INET, slave_array[i].c_str(), &slave_addr.sin_addr) < 0)
+		/* obtain address according to the slave ip address */
+		memset(hints, 0, sizeof(hints));
+		hints.ai_family = AF_UNSPEC; /* Allow both IPv4 and IPv6 */
+		hints.ai_socktype = SOCK_STREAM; 
+		
+		int n;
+		if((n = getaddrinfo(slave_array[i].c_str(), slave_port, &hints, &result)) != 0)
 		{
-			log_ret("init_slave: inet_pton error");
+			log_msg("init_slave: getaddrinfo: %s connect to %s", gai_strerror(n), slave_array.c_str());
 			continue;
 		}
-		// try to connnect to the current ip address.
-		if(connect(sock_slave, (struct sockaddr*) &slave_addr, sizeof(slave_addr)) < 0)
+
+		int sock_slave;
+		for(rp = result; rp != NULL; rp = rp->ai_next)
 		{
-			log_ret("init_slave: connect error");
-			continue;
+			sock_slave=socket(rp->ai_family , rp->ai_socktype, rp->ai_protocol);
+			if(sock_slave == -1)
+				continue;
+			if(connect(sock_slave, rp->ai_addr, rp->ai_addrlen) != -1)
+				break; // connect successfully
+			close(sock_slave);
 		}
-		log_msg("init_slave: slave %s connected successfully", slave_array.c_str());
+		//current slave is available
+		if(rp != NULL)
+		{
+			++number;
+			available_slave.insert(make_pair(slave_array[i],sock_slave));
+		}
+		else
+			log_msg("init_slave: %s is unavailable",string[i].c_str());
+		freeaddrinfo(result);
 	}
+	return number;
 }
+
+// initialize the master server 
+// listen to the client.
+int init_master(const char *master_port)
+{
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
+	
+	memset(&hints, 0, sizeof(addrinfo));
+	hints.ai_family = AF_UNSPEC; /* allow IPv4 and IPv6 */
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	
+	int n;
+	if(( n = getaddrinfo(NULL, master_port, &hints, &result)) != 0)
+		log_quit("init_master: getaddrinfo %s", gai_strerror(n));
+
+	int sock_master;
+	for(rp = rp->result; rp != NULL; rp = rp->ai_next)
+	{
+		sock_master = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if(sock_master == -1)
+			continue;
+		if(bind(sock_master, rp->ai_addr, rp->ai_addrlen) == 0)
+			break; /* success */
+		close(sock_master);
+	}
+	// init master failed
+	if(rp == NULL)
+		log_quit("init_master: init master unsuccessfully");
+	freeaddrinfo(result);
+	
+	return sock_master;
+}
+
+
