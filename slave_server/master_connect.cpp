@@ -51,7 +51,7 @@ void *master_connect_thread(void *arg)
 			command_parse(recvline);
 		}
 	}
-
+	SSL_shutdown(ssl); /* send SSL/TLC close_notify */
 	close(sock_fd); //close the socket connected to the master server
 	SSL_free(ssl); // free the ssl 
 	log_msg("master_connect_thread: %s was unconnected", addr);
