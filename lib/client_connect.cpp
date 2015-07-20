@@ -4,7 +4,7 @@
 	> Mail: ruiwng@zju.edu.cn 
 	> Created Time: Fri 17 Jul 2015 03:50:00 PM CST
  ************************************************************************/
-#include  "csd.h"
+#include  "vscs.h"
 
 int client_connect(const char *address, const char *port)
 {
@@ -40,7 +40,6 @@ int client_connect(const char *address, const char *port)
 	if(rp == NULL)
 	{
 		// can't connect to the current address
-		log_msg("client_connect: connect to %s unsuccessfully", address);
 		return -1;
 	}
 
