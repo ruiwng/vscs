@@ -171,9 +171,10 @@ static void *upload_thread(void *command_line)
 				continue;
 			else
 			{
-				log_ret("upload_thread: read error");
+				log_ret("upload_thread: SSL_read error");
 				fclose(p_file);
 				close(sock_fd);
+				SSL_free(ssl);
 				return NULL; 
 			}
 		}
