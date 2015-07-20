@@ -4,7 +4,7 @@
 	> Mail: ruiwng@zju.edu.cn 
 	> Created Time: Fri 17 Jul 2015 03:59:44 PM CST
  ************************************************************************/
-#include  "csd.h"
+#include  "vscs.h"
 
 //listen to the port 
 int server_listen(const char *port)
@@ -37,10 +37,7 @@ int server_listen(const char *port)
 	
 	freeaddrinfo(result);
 	if(rp == NULL)
-	{
-		log_msg("server_listen: listen to %s unsuccessfully", port);
 		return -1;
-	}
-
+	listen(sockfd, LISTEN_COUNT);
 	return sockfd;
 }	
