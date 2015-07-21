@@ -1,0 +1,5 @@
+# client configure file.
+MASTER_PORT 8991
+TRANSMIT_PORT 8993
+SSL_CERTIFICATE /home/ruiwng/openssl_test/cacert.pem
+SSL_KEY /home/ruiwng/openssl_test/privatekey.pem
