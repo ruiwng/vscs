@@ -145,5 +145,5 @@ SSL* ssl_client(SSL_CTX *ctx, int sockfd);
 int ssl_readn(SSL *, void *vptr, int n);
 
 // write n characters to SSL*.
-int ssl_writen(SSL *, const char *vptr, int n);
+int ssl_writen(SSL *, const void *vptr, int n);
 #endif /* VSCS_H */
