@@ -73,20 +73,66 @@ static void *download_thread(void *command_line)
 
 	if(ssl == NULL)
 	{
+		fclose(p_file);
+		close(sock_fd);
 		log_msg("dowload_thread: ssl_server error");
 		return NULL;
 	}
+	
+	// to make sure this is the very file that the client want to download.
+	char str_buf[MAXBUF];
+	int nread;
+	struct stat s;
+	fstat(fileno(p_file));
+	snprintf(str_buf,"download %s %d", file_name, s.st_size);
+	if(SSL_write(ssl, str_buf, strlen(str_buf)) != strlen(str_buf))
+	{
+		fcloe(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("download_thread: SSL_write error");
+		return NULL;
+	}
+	if((nread = SSL_read(ssl, str_buf, MAXBUF)) < 0)
+	{
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("download_thread: SSL_read error");
+		return NULL;
+	}
 
+	str_buf[nread] = '\0';
+	if(strcmp(str_buf,"OK") != 0)
+	{
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("download_thread: strcmp unsuccessfully");
+		return NULL;
+	}
 	// insert the download job to the download array.
 	pthread_mutex_lock(&download_mutex);
 	download_array.insert((const char *)command_line);
 	pthread_mutex_unlock(&download_mutex);
 
 	//start to transmit the file
-	char str_buf[MAXBUF];
-	int nread;
 	while((nread = fread(str_buf, sizeof(char), MAXBUF, p_file) > 0))
-		SSL_write(ssl, str_buf, nread);
+	{
+		if(SSL_write(ssl, str_buf, nread) != nread)
+		{
+			SSL_shutdown(ssl);
+			close(sock_fd);
+			fclose(p_file);
+
+			SSL_free(ssl);
+			log_msg("download_thread SSL_write error");
+			return NULL;
+		}
+	}
 	// close the socket and the open file.
 	
 	// erase the download job from the download array.
@@ -141,6 +187,7 @@ static void *upload_thread(void *command_line)
 	//fail in establishing a connection to the client.
 	if(sock_fd < 0)
 	{
+		unlink(file);
 		fclose(p_file);
 		log_msg("upload_thread: cannot connect to %s:%s", ip_addr, client_transmit_port);
 		return NULL;
@@ -151,13 +198,50 @@ static void *upload_thread(void *command_line)
 
 	if(ssl == NULL)
 	{
+		unlink(file);
 		fclose(p_file);
+		close(sock_fd);
 		log_msg("upload_thread: ssl_client error");
 		return NULL;
 	}
 	char str_buf[MAXBUF];
 	int nread;
 
+	snprintf(str_buf, MAXBUF, "upload %s", file_name);
+	if(SSL_write(ssl, str_buf, strlen(str_buf) != strlen(str_buf)))
+	{
+		unlink(file);
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("upload_thread: SSL_write error");
+		return NULL;
+	}
+	if((nread = SSL_read(ssl, str_buf, MAXBUF)) < 0)
+	{
+		unlink(file);
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("upload_thread: SSL_read error");
+		return NULL;
+	}
+	str_buf[nread] = '\0';
+	if(strcmp(str_buf,"ERR") == 0)
+	{
+		unlink(file);
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("upload_thread: strcmp error");
+		return NULL;
+	}
+	int upload_bytes;
+	int m = sscanf(str_buf, "%d",&upload_bytes);
+	SSL_write(ssl, "OK", strlen("OK"));
 	// add the upload job to the upload array.
 	pthread_mutex_lock(&upload_mutex);
 	upload_array.insert((const char *)command_line);
@@ -172,17 +256,29 @@ static void *upload_thread(void *command_line)
 			else
 			{
 				log_ret("upload_thread: SSL_read error");
+				unlink(file);
 				fclose(p_file);
+				SSL_shutdown(ssl);
 				close(sock_fd);
 				SSL_free(ssl);
-				return NULL; 
+				return  NULL; 
 			}
 		}
 		if(nread == 0) // connection to the client was broken.
 			break;
 		fwrite(str_buf, sizeof(char), nread, p_file);
+		upload_bytes -= nread;
 	}
-
+	if(upload_bytes != 0)
+	{
+		unlink(file);
+		fclose(p_file);
+		SSL_shutdown(ssl);
+		close(sock_fd);
+		SSL_free(ssl);
+		log_msg("upload_thread: file size not equal");
+		return NULL;
+	}
 	//erase the upload job from the upload array.
 	pthread_mutex_lock(&upload_mutex);
 	upload_array.erase((const char *)command_line);
@@ -233,7 +329,7 @@ void command_parse(const char *command_line)
 			{
 				free(q); 
 				log_msg("command_parse: unknown command");
-				return;  
+				return;   
 			}
 	}
 }
