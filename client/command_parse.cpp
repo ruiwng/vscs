@@ -18,6 +18,7 @@ extern unordered_map<string, record> download_array; // all download files
 //exclusive access to the upload array.
 extern pthread_mutex_t upload_mutex;
 extern unordered_map<string, record> upload_array; // all upload files.
+extern char ip_address[MAXLINE]; // the ip address of the client.
 
 void command_parse(SSL *ssl, char *command_line)
 {
@@ -48,8 +49,18 @@ void command_parse(SSL *ssl, char *command_line)
 		echo();
 		nocbreak();
 		snprintf(message, MAXLINE,"signup %s %s", arg, password);
-		SSL_write(ssl, message, strlen(message));
-		int k = SSL_read(ssl, message, MAXLINE);
+		int k = strlen(message);
+		if(ssl_writen(ssl, message, strlen(message)) != k)
+		{
+			printf("command_parse: SSL_read error");
+			return;
+		}
+		k = SSL_read(ssl, message, MAXLINE);
+		if(k < 0)
+		{
+			printf("command_parse: SSL_read error");
+			return;
+		}
 		message[k] = '\0';
 		printf("%s\n", message);
 	}
@@ -83,6 +94,28 @@ void command_parse(SSL *ssl, char *command_line)
 		SSL_write(ssl, "signout", strlen("signout"));
 		stop = true;
 	}
+	else if(strcmp(command, "delete") == 0) // delete a file
+	{
+		if(n != 2)
+		{
+			printf("wrong command\n");
+			return;
+		}
+		int k = strlen(command_line);
+		if(ssl_writen(ssl, command_line, k) != k)
+		{
+			printf("ssl_write error.\n");
+			return;
+		}
+		k = SSL_read(ssl, message, MAXLINE);
+		if(k < 0)
+		{
+			printf("SSL_read error.\n");
+			return;
+		}
+		message[k] = '\0';
+		printf("%s\n", message);
+	}
 	else if(strcmp(command, "ls") == 0) // list all the files of the user.
 	{
 		if(n != 1)
@@ -94,17 +127,17 @@ void command_parse(SSL *ssl, char *command_line)
 		int len;
 		int k = SSL_read(ssl, message, MAXLINE);
 		message[k] = '\0';
-		if(strcmp(message,"Please login.\n")== 0)
-			printf("Please login.\n");
+		if(strcmp(message,"not signed in.\n")== 0)
+			printf("not signed in.\n");
 		else
 		{
 			sscanf(message, "%d", &len);
 			SSL_write(ssl, "OK", strlen("OK"));
 			char *p_list = (char *)malloc(len + 1);
-			if(SSL_readn(ssl, p_list, len) != len)
+		    if(ssl_readn(ssl, p_list, len) != len)
 			{
 				printf("SSL_readn error.\n");
-				return;
+				return; 
 			}
 			p_list[len] = '\0';
 			printf("%s\n", p_list);
@@ -112,24 +145,32 @@ void command_parse(SSL *ssl, char *command_line)
 	}
 	else if(strcmp(command, "upload") == 0) // upload a file to the slave server
 	{
-		if(n != 2)
+		if(n != 3)
 		{
 			printf("wrong command\n");
 			return;
 		}
-		int file = open(arg, O_RDONLY);
-		if(file == -1)
+		// add the file to be uploaded to the upload array.
+		struct stat buf;
+		int file = open(arg,FILE_MODE);
+		if(file < 0)
 		{
-			printf("file not exists\n");
+			printf("file %s not exist\n", arg);
 			return;
 		}
-		struct stat buf;
-		fstat(file,&buf);
-		// add the file to be uploaded to the upload array.
+		fstat(file, &buf);
 		pthread_mutex_lock(&upload_mutex);
 		upload_array.insert(make_pair(arg, record(buf.st_size)));
 		pthread_mutex_unlock(&upload_mutex);
 		close(file);
+		snprintf(message, MAXLINE, "upload %s %s",ip_address, arg);
+		int len = strlen(message);
+
+		if(ssl_writen(ssl, message, len) != len)
+		{
+			printf("ssl_writen error\n");
+			return;
+		}
 	}
 	else if(strcmp(command, "download") == 0) // download a file from the slave server.
 	{
@@ -142,6 +183,14 @@ void command_parse(SSL *ssl, char *command_line)
 		pthread_mutex_lock(&download_mutex);
 		download_array.insert(make_pair(arg, record()));
 		pthread_mutex_unlock(&download_mutex);
+		snprintf(message, MAXLINE, "download %s %s", ip_address, arg);
+		int len = strlen(message);
+
+		if(ssl_writen(ssl, message, len) != len)
+		{
+			printf("ssl_writen error\n");
+			return;
+		}
 	}
 	else if(strcmp(command, "status") == 0)
 	{
@@ -150,7 +199,6 @@ void command_parse(SSL *ssl, char *command_line)
 			printf("wrong command\n");
 			return;
 		}
-
 	}
 	else 
 		printf("command not found\n");
