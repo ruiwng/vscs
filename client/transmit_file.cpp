@@ -28,7 +28,7 @@ void *download_thread(void *arg)
 		printf("download_thread: open %s for write unsuccessfully", down_arg->file_name);
 		return NULL;
 	}
-
+	SSL_write(down_arg->ssl, "OK", strlen("OK"));
 	char str_buf[MAXBUF];
 	int nread, download_bytes = 0;
 	int k = 0;
@@ -42,8 +42,10 @@ void *download_thread(void *arg)
 			{
 				log_ret("upload_thread: SSL_read error");
 				fclose(p_file);
+				SSL_shutdown(down_arg->ssl);
+				close(down_arg->sockfd);
 				SSL_free(down_arg->ssl);
-				delete down_arg;
+				delete down_arg; 
 			}
 		}
 		if(nread == 0) //connection to the client was broken.
@@ -60,18 +62,26 @@ void *download_thread(void *arg)
 		}
 	}
 	// close the socket descriptor, the SSL, and free the memory.
+	SSL_shutdown(down_arg->ssl);
 	close(down_arg->sockfd);
 	SSL_free(down_arg->ssl);
 
 	// whether download successfully, or not.
+	bool success;
 	pthread_mutex_lock(&download_mutex);
-	if(down_arg->iter->second.current != down_arg->iter->second.sum)
+	success = (down_arg->iter->second.current == down_arg->iter->second.sum);
 		printf("%s download unsuccessfully.\n", down_arg->file_name);
 	else
 		printf("%s download successfully.\n", down_arg->file_name);
 	download_array.erase(down_arg->iter);
 	pthread_mutex_unlock(&download_mutex);
-
+	if(success)
+		printf("%s download successfully.\n", down_arg->file_name);
+	else
+	{
+		printf("%s download successfully.\n", down_arg->file_name);
+		unlink(down_arg->file_name);
+	}
 	delete down_arg;
 	
 	return NULL;
@@ -86,15 +96,39 @@ void *upload_thread(void *arg)
 	FILE *p_file;
 	if((p_file = fopen(up_arg->file_name, "r")) == NULL)
 	{
+		SSL_shutdown(up_arg->ssl);
 		close(up_arg->sockfd);
 		SSL_free(up_arg->ssl);
 		delete up_arg;
-		printf("upload_thread: open %s for read unsuccessfully", up_arg->file_name);
+		printf("upload_thread: open %s for read unsuccessfully\n", up_arg->file_name);
+		return NULL;
 	}
-
+	
 	char str_buf[MAXBUF];
 	int nread, upload_bytes = 0;
+	snprintf(str_buf, MAXBUF, "%d", up_arg->iter->second.sum);
+	SSL_write(up_arg->ssl, str_buf, strlen(str_buf));
+	if(nread = SSL_read(up_arg->ssl, str_buf, MAXBUF) < 0)
+	{
+		SSL_shutdown(up_arg->ssl);
+		close(up_arg->sockfd);
+		SSL_free(up_arg->ssl);
+		printf("upload_thread: SSL_read error\n");
+		delete up_arg;
+		return NULL;
+	}
+	str_buf[nread] = '\0';
+	if(strcmp(buf, "OK") != 0)
+	{
+		SSL_shutdown(up_arg->ssl);
+		close(up_arg->sockfd);
+		SSL_free(up_arg->ssl);
+		printf("upload_thread: strcmp error\n");
+		delete up_arg;
+		return NULL;
+	}
 	int k =0;
+
 	while((nread = fread(str_buf, sizeof(char), MAXBUF, p_file)) > 0)
 	{
 		if(SSL_write(up_arg->ssl, str_buf, nread) < 0)
@@ -110,17 +144,21 @@ void *upload_thread(void *arg)
 		}
 	}
 	// close the socket descriptor, the SSL, and free the memory.
+	SSL_shutdown(up_arg->ssl);
 	close(up_arg->sockfd);
 	SSL_free(up_arg->ssl);
 
 	// whether upload successfully, or not.
+	bool success;
 	pthread_mutex_lock(&upload_mutex);
-	if(up_arg->iter->second.current != up_arg->iter->second.sum)
-		printf("%s upload unsuccessfully.\n", up_arg->file_name);
-	else
+	success = (up_arg->iter->second.current == up_arg->iter->second.sum);
+	upload_array.erase(up_arg->iter);
+	pthread_mutex_unlock(&upload_mutex);
+
+	if(success)
 		printf("%s upload successfully.\n", up_arg->file_name);
-	download_array.erase(up_arg->iter);
-	pthread_mutex_unlock(&download_mutex);
+	else
+		printf("%s upload unsuccessfully.\n", up_arg->file_name);
 
 	delete up_arg;
 
