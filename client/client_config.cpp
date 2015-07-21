@@ -80,7 +80,7 @@ int client_configure(char *master_port, char *transmit_port, char *ssl_certifica
 	if(*master_port == '\0' || *transmit_port == '\0' || *ssl_certificate == '\0'
 			|| *ssl_key == '\0')
 	{
-		log_msg("unconfigured argument exists");
+		printf("unconfigured argument exists");
 		return -1;
 	}
 	return 0;
