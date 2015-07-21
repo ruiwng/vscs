@@ -59,6 +59,8 @@ void *transmit_thread(void *arg)
 		{
 			if(k != 2)
 			{
+				SSL_write(ssl, "ERR", strlen("ERR"));
+				SSL_shutdown(ssl);
 				close(slave_fd);
 				SSL_free(ssl);
 				err_msg("transmit_thread: wrong command");
@@ -73,10 +75,12 @@ void *transmit_thread(void *arg)
 			if(exist)
 			{
 				transmit_arg *down_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
-				pthread_create(&thread, NULL, download_thread, (void *)down_arg);
+				pthread_create(&thread, NULL, upload_thread, (void *)down_arg);
 			}
 			else
 			{
+				SSL_write(ssl, "ERR", strlen("ERR"));
+				SSL_shutdown(ssl);
 				close(slave_fd);
 				SSL_free(ssl);
 				err_msg("transmit_thread:  upload file not found.");  
@@ -87,10 +91,11 @@ void *transmit_thread(void *arg)
 		{
 			if(k != 3)
 			{
+				SSL_shutdown(ssl);
 				close(slave_fd);  
 				SSL_free(ssl);
 				err_msg("transmit_thread: wrong command");
-				continue;
+				continue; 
 			}
 			// find whether the download job exist.
 			pthread_mutex_lock(&download_mutex);
@@ -98,18 +103,19 @@ void *transmit_thread(void *arg)
 			if(iter != download_array.end())
 			{
 				iter->second.sum =  file_size; 
-				exist = true; 
+				exist = true;  
 			}
 			pthread_mutex_unlock(&download_mutex);
 			if(exist)
 			{
 				transmit_arg *up_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
-				pthread_create(&thread, NULL, upload_thread, (void *)up_arg);
+				pthread_create(&thread, NULL, download_thread, (void *)up_arg);
 			}
 		}
 		else
 		{  
 			// unrecoginized command.
+			SSL_shutdown(ssl);
 		    close(slave_fd);
 			SSL_free(ssl);
 			err_msg("transmit_thread: wrong command");
