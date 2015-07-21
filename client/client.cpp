@@ -16,6 +16,7 @@ char ssl_certificate[MAXLINE]; // the ssl certificate file.
 char ssl_key[MAXLINE]; // the ssl key file.
 SSL_CTX *ctx;
 bool stop = false; // whether to stop the execution or not.
+char ip_address[MAXLINE]; // the ip address of the client.
 
 // exculsive access to the download array.
 pthread_mutex_t download_mutex; 
@@ -74,12 +75,12 @@ void *transmit_thread(void *arg)
 			pthread_mutex_unlock(&upload_mutex);
 			if(exist)
 			{
-				transmit_arg *down_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
+ 				transmit_arg *down_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
 				pthread_create(&thread, NULL, upload_thread, (void *)down_arg);
 			}
 			else
 			{
-				SSL_write(ssl, "ERR", strlen("ERR"));
+ 				SSL_write(ssl, "ERR", strlen("ERR"));
 				SSL_shutdown(ssl);
 				close(slave_fd);
 				SSL_free(ssl);
@@ -91,7 +92,7 @@ void *transmit_thread(void *arg)
 		{
 			if(k != 3)
 			{
-				SSL_shutdown(ssl);
+ 				SSL_shutdown(ssl);
 				close(slave_fd);  
 				SSL_free(ssl);
 				err_msg("transmit_thread: wrong command");
@@ -103,12 +104,12 @@ void *transmit_thread(void *arg)
 			if(iter != download_array.end())
 			{
 				iter->second.sum =  file_size; 
-				exist = true;  
+ 				exist = true;  
 			}
 			pthread_mutex_unlock(&download_mutex);
 			if(exist)
 			{
-				transmit_arg *up_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
+ 				transmit_arg *up_arg = new transmit_arg(slave_fd, ssl, iter, file_name);
 				pthread_create(&thread, NULL, download_thread, (void *)up_arg);
 			}
 		}
@@ -155,6 +156,11 @@ int main(int argc, char *argv[])
 		printf("cannot connect to master server: %s\n", argv[1]);
 		return -1;
 	}
+	sockaddr_in clientaddr;
+	socklen_t len = sizeof(clientaddr);
+	getsockname(masterfd, (sockaddr*)&clientaddr, &len);
+	inet_ntop(AF_INET, (void *)&clientaddr, ip_address, MAXLINE);
+
 	printf("connected to the master server: %s\n", argv[1]);
 	
 	SSL *ssl = ssl_client(ctx, masterfd);
