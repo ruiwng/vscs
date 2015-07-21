@@ -1,12 +1,12 @@
 # compile
 CC=g++
 
-# header file directory
+# header files directory
 INCLUDE=../include
 
 LIBVSCS=libvscs.a
 
-# lib file directory
+# lib files directory
 LIBS=-L../lib -lvscs -lpthread -lssl -lncurses
 
 # clean files
@@ -18,6 +18,6 @@ CPPFLAGS= -ansi -std=c++0x -I$(INCLUDE) -Wall -D_REENTRANT -O2
 COMPILE.cpp= $(CC) $(CPPFLAGS) -c
 
 # link option
-LINK.cpp=$(CC) $(CFLAGS)
+LINK.cpp=$(CC) $(CPPFLAGS)
 
 
