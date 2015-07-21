@@ -1,0 +1,6 @@
+# slave server configure file
+SLAVE_PORT 8989
+SLAVE_STATUS_PORT 8990 
+CLIENT_TRANSMIT_PORT 8993
+SSL_CERTIFICATE /home/ruiwng/openssl_test/cacert.pem
+SSL_KEY /home/ruiwng/openssl_test/privatekey.pem
