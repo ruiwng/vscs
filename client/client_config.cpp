@@ -51,7 +51,7 @@ int client_configure(char *master_port, char *transmit_port, char *ssl_certifica
 				printf("client_configure: TRANSMIT_PORT duplicate configured\n");
 				return -1; 
 			}
-			strcpy(master_port, conf);
+			strcpy(transmit_port, conf);
 		}
 		else if(strcmp(name, "SSL_CERTIFICATE") == 0) //ssl certificate file
 		{
@@ -80,7 +80,7 @@ int client_configure(char *master_port, char *transmit_port, char *ssl_certifica
 	if(*master_port == '\0' || *transmit_port == '\0' || *ssl_certificate == '\0'
 			|| *ssl_key == '\0')
 	{
-		printf("unconfigured argument exists");
+		printf("unconfigured argument exists\n");
 		return -1;
 	}
 	return 0;

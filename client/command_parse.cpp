@@ -34,25 +34,36 @@ void command_parse(SSL *ssl, char *command_line)
 		}
 		char password[MAXLINE];
 		char retype[MAXLINE];
-		cbreak();
-		noecho(); //cancel echo
+		//close the echo
+		struct termios init_settings,new_settings;
+		tcgetattr(fileno(stdin), &init_settings);
+		new_settings = init_settings;
+		new_settings.c_lflag &= ~ECHO;
+		if(tcsetattr(fileno(stdin), TCSAFLUSH, &new_settings) != 0)
+	    {
+			printf("could not set termios attributes\n");
+			return;
+	    }
 		while(true)
 		{
-			printf("New password: ");
-			scanf("%s", password);
-			printf("Retry new password: ");
-			scanf("%s", retype);
+			printf("New password:");
+			fgets(password,MAXLINE, stdin);
+			printf("\nRetry new password:");
+			fgets(retype, MAXLINE, stdin);
 			if(strcmp(password, retype) == 0)
 				break;
-			printf("Sorry, passwords do not match\n");
+			printf("\nSorry, passwords do not match\n");
 		}
-		echo();
-		nocbreak();
+		printf("\n");
+		tcsetattr(fileno(stdin), TCSANOW, &init_settings);
+		int len = strlen(password);
+		if(password[len - 1] == '\n')
+			password[len - 1] = '\0';
 		snprintf(message, MAXLINE,"signup %s %s", arg, password);
 		int k = strlen(message);
-		if(ssl_writen(ssl, message, strlen(message)) != k)
+		if(SSL_write(ssl, message, k) != k)
 		{
-			printf("command_parse: SSL_read error");
+			printf("command_parse: ssl_writen error");
 			return;
 		}
 		k = SSL_read(ssl, message, MAXLINE);
@@ -72,17 +83,28 @@ void command_parse(SSL *ssl, char *command_line)
 			return;
 		}
 		char password[MAXLINE];
-		cbreak();
-		noecho(); //cancel echo
+	    //cancel echo
+		struct termios init_settings,new_settings;
+		tcgetattr(fileno(stdin), &init_settings);
+		new_settings = init_settings;
+		new_settings.c_lflag &= ~ECHO;
+		if(tcsetattr(fileno(stdin), TCSAFLUSH, &new_settings) != 0)
+		{
+			printf("could not set termios attributes\n");
+			return;
+		}
 		printf("Password: ");
-		scanf("%s", password);
-		echo();
-		nocbreak();
+		fgets(password, MAXLINE, stdin);
+		printf("\n");
+		tcsetattr(fileno(stdin), TCSANOW, &init_settings);
+		int len = strlen(password);
+		if(password[len - 1] == '\n')
+			password[len - 1] = '\0';
 		snprintf(message, MAXLINE, "signin %s %s", arg, password);
 		SSL_write(ssl, message, strlen(message));
 		int k = SSL_read(ssl, message, MAXLINE);
 		message[k] = '\0';
-		printf("%s\n", message);
+		printf("%s", message);
 	}
 	else if(strcmp(command, "signout") == 0) // signout
 	{
@@ -114,7 +136,7 @@ void command_parse(SSL *ssl, char *command_line)
 			return;
 		}
 		message[k] = '\0';
-		printf("%s\n", message);
+		printf("%s", message);
 	}
 	else if(strcmp(command, "ls") == 0) // list all the files of the user.
 	{
@@ -127,7 +149,7 @@ void command_parse(SSL *ssl, char *command_line)
 		int len;
 		int k = SSL_read(ssl, message, MAXLINE);
 		message[k] = '\0';
-		if(strcmp(message,"not signed in.\n")== 0)
+		if(strcmp(message,"not signed in\n")== 0)
 			printf("not signed in.\n");
 		else
 		{
@@ -140,12 +162,13 @@ void command_parse(SSL *ssl, char *command_line)
 				return; 
 			}
 			p_list[len] = '\0';
-			printf("%s\n", p_list);
+			printf("%s", p_list);
 		}
 	}
 	else if(strcmp(command, "upload") == 0) // upload a file to the slave server
 	{
-		if(n != 3)
+		// commandline format: upload ip_address file_name file_size
+		if(n != 2)
 		{
 			printf("wrong command\n");
 			return;
@@ -163,7 +186,7 @@ void command_parse(SSL *ssl, char *command_line)
 		upload_array.insert(make_pair(arg, record(buf.st_size)));
 		pthread_mutex_unlock(&upload_mutex);
 		close(file);
-		snprintf(message, MAXLINE, "upload %s %s",ip_address, arg);
+		snprintf(message, MAXLINE, "upload %s %s %d",ip_address, arg, (int)buf.st_size);
 		int len = strlen(message);
 
 		if(ssl_writen(ssl, message, len) != len)
@@ -171,6 +194,14 @@ void command_parse(SSL *ssl, char *command_line)
 			printf("ssl_writen error\n");
 			return;
 		}
+		int k = SSL_read(ssl, message, MAXLINE);
+		if(k < 0)
+		{
+			printf("SSL_read error\n");
+			return;
+		}
+		message[k] = '\0';
+		printf("%s", message);
 	}
 	else if(strcmp(command, "download") == 0) // download a file from the slave server.
 	{
@@ -191,6 +222,15 @@ void command_parse(SSL *ssl, char *command_line)
 			printf("ssl_writen error\n");
 			return;
 		}
+		
+		int k = SSL_read(ssl, message, MAXLINE);
+		if(k < 0)
+		{
+			printf("SSL_read error\n");
+			return;
+		}
+		message[k] = '\0';
+		printf("%s", message);
 	}
 	else if(strcmp(command, "status") == 0)
 	{

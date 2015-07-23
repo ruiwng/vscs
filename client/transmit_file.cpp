@@ -70,6 +70,7 @@ void *download_thread(void *arg)
 	bool success;
 	pthread_mutex_lock(&download_mutex);
 	success = (down_arg->iter->second.current == down_arg->iter->second.sum);
+	if(success)
 		printf("%s download unsuccessfully.\n", down_arg->file_name);
 	else
 		printf("%s download successfully.\n", down_arg->file_name);
@@ -108,7 +109,7 @@ void *upload_thread(void *arg)
 	int nread, upload_bytes = 0;
 	snprintf(str_buf, MAXBUF, "%d", up_arg->iter->second.sum);
 	SSL_write(up_arg->ssl, str_buf, strlen(str_buf));
-	if(nread = SSL_read(up_arg->ssl, str_buf, MAXBUF) < 0)
+	if((nread = SSL_read(up_arg->ssl, str_buf, MAXBUF)) < 0)
 	{
 		SSL_shutdown(up_arg->ssl);
 		close(up_arg->sockfd);
@@ -118,7 +119,7 @@ void *upload_thread(void *arg)
 		return NULL;
 	}
 	str_buf[nread] = '\0';
-	if(strcmp(buf, "OK") != 0)
+	if(strcmp(str_buf, "OK") != 0)
 	{
 		SSL_shutdown(up_arg->ssl);
 		close(up_arg->sockfd);
