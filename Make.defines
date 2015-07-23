@@ -18,6 +18,6 @@ CPPFLAGS= -ansi -std=c++0x -I$(INCLUDE) -Wall -D_REENTRANT -O2
 COMPILE.cpp= $(CC) $(CPPFLAGS) -c
 
 # link option
-LINK.cpp=$(CC) $(CPPFLAGS)
+LINK.cpp=$(CC) $(CPPFLAGS)  $(LIBS)
 
 
