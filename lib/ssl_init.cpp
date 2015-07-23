@@ -6,7 +6,7 @@
  ************************************************************************/
 #include  "vscs.h"
 
-SSL_CTX *ssl_init(const char *certificate, const char *key)
+SSL_CTX *ssl_server_init(const char *certificate, const char *key)
 {
 	SSL_CTX *ctx;
 	const SSL_METHOD *meth;
@@ -19,21 +19,46 @@ SSL_CTX *ssl_init(const char *certificate, const char *key)
 
 	if(!ctx)
 	{
-		log_msg("ssl_init: SSL_CTX_new error.");
+		log_msg("ssl_server_init: SSL_CTX_new error.");
 		return NULL;
 	}
 	//read the certificate file
 	if(SSL_CTX_use_certificate_file(ctx, certificate, SSL_FILETYPE_PEM) <= 0)
 	{
-		log_msg("ssl_init: SSL_CTX_use_certificate_file error");
+		log_msg("ssl_server_init: SSL_CTX_use_certificate_file error");
 		return NULL;
 	}
 	//read the private key file
 	if(SSL_CTX_use_PrivateKey_file(ctx, key, SSL_FILETYPE_PEM) <= 0)
 	{
-		log_msg("ssl_init: SSL_CTX_check_private_key error.");
+		log_msg("ssl_server_init: SSL_CTX_check_private_key error.");
+		return NULL;
+	}
+	
+	if(!SSL_CTX_check_private_key(ctx))
+	{
+		log_msg("ssl_server_init: SSL_CTX_check_private_key error.");
 		return NULL;
 	}
 
+	return ctx;
+}
+
+SSL_CTX *ssl_client_init()
+{
+	SSL_CTX *ctx;
+	const SSL_METHOD *meth;
+
+	SSL_load_error_strings();
+	SSLeay_add_ssl_algorithms();
+	meth = SSLv23_client_method();
+
+	ctx = SSL_CTX_new(meth);
+
+	if(!ctx)
+	{
+		log_msg("ssl_client_init: SSL_CTX_new error.");
+		return NULL;
+	}
 	return ctx;
 }

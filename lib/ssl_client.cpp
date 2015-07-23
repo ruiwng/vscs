@@ -18,7 +18,7 @@ SSL* ssl_client(SSL_CTX *ctx, int sockfd)
 	}
 
 	SSL_set_fd(ssl, sockfd);
-	int ret = SSL_accept(ssl);
+	int ret = SSL_connect(ssl);
 
 	if(ret == -1)
 	{
