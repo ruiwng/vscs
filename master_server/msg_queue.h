@@ -26,7 +26,7 @@ public:
 	msg_queue();
 	~msg_queue();
 	// get a message from the queue
-	void pop_msg(SSL *s, char *message);
+	void pop_msg(SSL *&s, char *message);
 	// push a message to the queue
 	void push_msg(SSL *s, char *message);
 

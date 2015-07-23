@@ -20,7 +20,7 @@ msg_queue::~msg_queue()
 	pthread_mutex_destroy(&queue_mutex);
 }
 
-void msg_queue::pop_msg(SSL *s, char *message)
+void msg_queue::pop_msg(SSL *&s, char *message)
 {
 	sem_wait(&queue_sem);//wait until the queue is not empty
 

@@ -14,11 +14,12 @@ extern unordered_map<string, SSL*> connected_slaves; // all the connected slave 
 extern unordered_map<string, SSL*>::iterator current_iterator; // the very iterator points to the slave server that will be used 
 
 // parse the command from the client.
-void command_parse(const SSL *ssl,const char *command_line)
+void command_parse(SSL *ssl,const char *command_line)
 {
 	char command[MAXLINE], arg1[MAXLINE], arg2[MAXLINE];
+	int arg3;
 	char message[MAXLINE];
-	int n = sscanf(command_line, "%s%s%s", command, arg1, arg2);
+	int n = sscanf(command_line, "%s%s%s%d", command, arg1, arg2, &arg3);
 
 	// whether or not the user has login.
 	unordered_map<SSL *,client_info*>::iterator iter = signin_users.find(ssl);
@@ -31,7 +32,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 		else
 		{
 		   int k = user_add(sockdb, arg1, arg2);
-		   if(k == ERR_USER_EXIST)
+		   if(k == USER_ALREADY_EXIST)
 			   snprintf(message, MAXLINE, "user %s already exists.\n", arg1);
 		   else if(k == ERR_USER_ADD)
 			   snprintf(message, MAXLINE, "user %s added unsuccessfully\n", arg1);
@@ -40,7 +41,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 		}
 		int len = strlen(message);
 		if(ssl_writen(ssl, message, len) != len)
-			log_msg("command_parse: SSL_write error");
+			log_msg("command_parse: ssl_write error");
 	}
 	else if(strcmp(command, "signin") == 0) // user login
 	{
@@ -58,7 +59,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 			else
 			{
 				signin_users[ssl] = new client_info(sockdb, arg1);
-	 			snprintf(message, MAXLINE, "user %s login successfully\n");
+	 			snprintf(message, MAXLINE, "user %s login successfully\n", arg1);
 			}
 		}
 		int len = strlen(message);
@@ -71,7 +72,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 			strcpy(message, "wrong command\n");
 		else
 		{
-			if(siged_in)
+			if(signed_in)
 			{
 	 			delete iter->second;
 				signin_users.erase(iter);
@@ -114,16 +115,17 @@ void command_parse(const SSL *ssl,const char *command_line)
 					if(strcmp(message, "OK") == 0)
 					{
 						if(ssl_writen(ssl, p, k) != k)
-				 			log_msg("command_parse: SSL_writen error");
-                     }
-				} 
+				 	 		log_msg("command_parse: SSL_writen error");
+                    }
+				}  
 			}
 			free(p);
 		}
 	}
 	else if(strcmp(command, "upload") == 0) // upload a file to the slave user.
 	{
-		if(n != 3)
+		// commandline format: upload(command) ip_address(arg1) file_name(arg2) file_size(arg3)
+		if(n != 4)
 			strcpy(message, "wrong command\n");
 		else if(!signed_in)
 			strcpy(message, "not signed in\n");
@@ -131,17 +133,17 @@ void command_parse(const SSL *ssl,const char *command_line)
 		{
 			SSL *store = current_iterator->second;
 			char temp[MAXLINE];
-			snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
+			snprintf(temp, MAXLINE, "upload %s %s %s", arg1, arg2, iter->second->get_clientname());
 			int x = strlen(temp);
 			if(ssl_writen(store, temp, x) != x) // ssl_writen error
-			{.
+			{
 				log_msg("command_parse: ssl_writen error");
-				snprintf(message, MAXLINE, "%s upload error\n", file_name);
+				snprintf(message, MAXLINE, "%s upload error\n", arg2);
 			}
 			else
 			{
-			    iter->second->add_file(file_name, file_size, current_iter->first.c_str());
-				snprintf(message, MAXLINE, "%s start to upload\n", file_name);
+			    iter->second->add_file(arg2, arg3, current_iterator->first.c_str());
+				snprintf(message, MAXLINE, "%s start to upload\n", arg2);
 			}
 			if(++current_iterator == connected_slaves.end())
 				current_iterator = connected_slaves.begin();
@@ -152,6 +154,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 	}
 	else if(strcmp(command, "download") == 0) // download a file 
 	{
+		//commandline format: upload ip_address(arg1) file_name(arg2)
 		if(n != 3) // wrong command
 			strcpy(message, "wrong command\n");
 		else if(!signed_in)// the user not signin.
@@ -175,11 +178,11 @@ void command_parse(const SSL *ssl,const char *command_line)
 					if(ssl_writen(iter_temp->second, temp, x) != x)
 					{
 						log_msg("command_parse: ssl_writen error");
-						snprintf(message, MAXLINE, "%s download error\n", file_name);
+				 		snprintf(message, MAXLINE, "%s download error\n", arg2);
 					}
 					else
-						snprintf(message, MAXLINE, "%s start to download\n", file_name);
-				}
+				 	 	snprintf(message, MAXLINE, "%s start to download\n", arg2);
+				}  
 			}
 		}
 		int len = strlen(message);
@@ -188,6 +191,7 @@ void command_parse(const SSL *ssl,const char *command_line)
 	}
 	else if(strcmp(command, "delete") == 0) // delete a file
 	{
+		// commandline format: delete ip_address(arg1) file_name(arg2)
 		if(n != 2) // wrong command 
 			strcpy(message, "wrong command\n");
 		else if(!signed_in) // the user not signin.
@@ -195,12 +199,12 @@ void command_parse(const SSL *ssl,const char *command_line)
 		else
 		{
 			char storage[MAXLINE];
-			int k = iter->second->query_storage(arg2, storage);
+			int k = iter->second->query_file_storage(arg2, storage);
 			if(k == FILE_NOT_EXIST) // the file not exist in the database.
 				strcpy(message, "file not exist\n");
 			else
 			{
-				unordered_map<string, SSL*>::iterator iter_temp = connected_slaves.find(storage);
+				unordered_map<string,  SSL*>::iterator iter_temp = connected_slaves.find(storage);
 				if(iter_temp == connected_slaves.end()) // the very slave server is not connected.
 					strcpy(message, "storage server not connected\n");
 				else
@@ -211,14 +215,14 @@ void command_parse(const SSL *ssl,const char *command_line)
 					if(ssl_writen(iter_temp->second, temp, x) != x) // send the slave server the message to delete a file.
 					{
 						log_msg("command_parse: ssl_writen error");
-						snprintf(message, MAXLINE, "%s delete error\n", file_name);
+				 	  	snprintf(message, MAXLINE, "%s delete error\n", arg2);
 					}
 					else
 					{
-						snprintf(message, MAXLINE, "%s deleted\n", file_name);
-						iter->second->delete_file(file_name);
-					}
-				}
+					  	snprintf(message, MAXLINE, "%s deleted\n", arg2);
+						iter->second->delete_file(arg2); 
+				  	 } 
+				}   
 			}
 		}
 		int len = strlen(message);

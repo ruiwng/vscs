@@ -89,6 +89,11 @@ void client_info::get_filelist()
 //restore the file list of the current user.
 int client_info::restore_filelist() const
 {
+	if(file_storage.empty())
+	{
+		log_msg("%s restore_filelist successfully",client_name.c_str());
+		return OK;
+	}
 	string result;
 	char temp[MAXLINE];
 	for(unordered_map<string,info>::const_iterator iter=file_storage.begin();
@@ -111,7 +116,7 @@ int client_info::restore_filelist() const
 		log_msg("%s restore_filelist unsuccessfully",client_name.c_str());
 		return ERR_RESTORE_FILE;
 	}
-	log_msg("%s resotre_filelist successfully",client_name.c_str());
+	log_msg("%s restore_filelist successfully",client_name.c_str());
 	return OK;
 }
 
@@ -137,6 +142,8 @@ char *client_info::show_filelist() const
 		snprintf(size, MAXLINE,"%dMB", iter->second.file_size);
 		result+=iter->first+" "+size+"\n";
 	}
+	if(result.empty())
+		result = "(nil)\n";
 	char *t = (char*)malloc(result.length()+1);
 	strcpy(t, result.c_str());
 	return t;

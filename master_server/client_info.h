@@ -34,6 +34,7 @@ public:
 	//remember to free the memory after its usage.
 	char *show_filelist() const;
 	int query_file_storage(const char *name, char *storage) const;
+	const char *get_clientname() const {return client_name.c_str();}
 private:
     void get_filelist();
 	int restore_filelist() const;
@@ -44,12 +45,18 @@ private:
 	const string client_name; /* the name of the user */
 };
 
-// add a user
+// add a user, if the user already exists, return ERR_USER_EXIST,
+// if add user successfully, return 0,
+// otherwise return ER_USER_ADD.
 int user_add(int sockdb, const char *name, const char *passwd);
 
 // judge the user exist or not.
+// if this is the case, return OK,
+// otherwise return -1.
 int user_exist(int sockdb, const char *name);
 
 // user login
+// the return value USER_NOT_EXIST indicates the user doesn't exist.
+// the return value WRONG_PASSWD indicates the password is wrong.
 int user_login(int sockdb, const char *name, const char *passwd);
 #endif // CLIENT_INFO_H

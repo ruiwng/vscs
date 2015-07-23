@@ -7,12 +7,14 @@
 #include  "vscs.h"
 #include  "master_config.h"
 #include  "msg_queue.h"
+#include  "command_parse.h"
 #include  <unordered_map>
 #include  <string>
 using namespace std;
 
 char redis_address[MAXLINE];// address of the redis database server
 char redis_port[MAXLINE];// port of the redis database server
+int sockdb; // the socket descriptor connected to the redis database server.
 
 vector<string> slave_array; //all the slave servers
 char slave_port[MAXLINE];// port of the slave server
@@ -26,12 +28,21 @@ char ssl_key[MAXLINE]; // private key of ssl
 
 unordered_map<string, SSL*> connected_slaves; // all the connected slave servers versus their file descriptor.
 unordered_map<int, SSL*> connected_clients; // all the clients connected to the server.
+unordered_map<string, SSL*>::iterator current_iterator; // the very iterator points the the slave server that will be used.
 msg_queue all_msgs;
 
 bool stop = false;   // whether stop the execution or not.
 // handle all the messages in the msg queue.
 void *msg_handler_thread(void *arg)
 {
+	SSL *ssl;
+	char message[MAXLINE];
+	while(!stop)
+	{
+	   //get a message from the message queue.
+	   all_msgs.pop_msg(ssl, message);
+	   command_parse(ssl, message);
+	}
 	return NULL;	
 }
 
@@ -91,23 +102,27 @@ int main(int argc, char *argv[])
 	//status port of master server, certificate of ssl and private key of ssl.
 	if(master_configure(redis_address, redis_port, slave_array, slave_port,
 				master_port, slave_status_port, master_status_port, ssl_certificate,
-				ssl_key) == -1)
+ 				ssl_key) == -1) 
 		log_quit("master server configure failed");
 
 	log_msg("master server configure successfully");
 
 	// initialize the SSL
-	SSL_CTX *ctx = ssl_init(ssl_certificate, ssl_key);
-	if(ctx == NULL)
-		log_quit("SSL initialize failed");
+	SSL_CTX *ctx_server = ssl_server_init(ssl_certificate, ssl_key);
+	if(ctx_server == NULL)
+		log_quit("SSL server initialize failed");
+	SSL_CTX *ctx_client = ssl_client_init();
+	if(ctx_client == NULL)
+		log_quit("SSL client initialize failed");
 	log_msg("SSL initialize successfully");
 
-	int sock_db;
+	// daemonize the master server.
+	daemonize("vscs_master");
+
 	//connect to the redis server.
-	if((sock_db = client_connect(redis_address, redis_port)) == -1)
+	if((sockdb = client_connect(redis_address, redis_port)) == -1)
 		log_quit("cannot connect to the redis server");
 	log_msg("connect to the redis server successfully");
-
 
 	int len = slave_array.size();
 	// connect to all the slave slave servers.
@@ -115,40 +130,45 @@ int main(int argc, char *argv[])
 	{
 		int sockfd = client_connect(slave_array[i].c_str(), slave_port);
 		if(sockfd == -1)
-			log_msg("cannot connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
-		SSL * ssl; // establish ssl connection to the slave server.
-		ssl = SSL_new(ctx);
-
-		if(ssl == NULL)
 		{
-			log_msg("SSL_new to slave server %s error", slave_array[i].c_str());
+			log_msg("cannot connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
 			continue;
 		}
-		SSL_set_fd(ssl, sockfd);
-		int ret = SSL_connect(ssl);
+		SSL * ssl_temp = ssl_client(ctx_client, sockfd); // establish ssl connection to the slave server.
 
-		if(ret == -1)
+		if(ssl_temp == NULL)
 		{
-			log_msg("SSL_connect to slave server %s error", slave_array[i].c_str());
+			log_msg("ssl_client to slave server %s error", slave_array[i].c_str());
 			continue;
 		}
 		//add the current connection to connected slave servers.
-		connected_slaves.insert(make_pair(slave_array[i], ssl));
+		connected_slaves.insert(make_pair(slave_array[i], ssl_temp));
 
 		log_msg("connect to the slave server %s successfully", slave_array[i].c_str());
 	}
-	if(!slave_array.empty())
+	if(connected_slaves.empty())
 		log_quit("no slave server available");
+	current_iterator = connected_slaves.begin();
 
 	// listen to the clients' connection
 	int listenfd = server_listen(master_port);
 	if(listenfd == -1)
 		log_quit("cannot listen the %s port", master_port);
+	log_msg("listen to %s port successfully", master_port);
 
 	// listen to status  port
 	int statusfd = server_listen(master_status_port);
 	if(statusfd == -1)
 		log_quit("cannot listen to %s status port", master_status_port);
+	log_msg("listen to %s status port successfully", master_status_port);
+
+	// create the message handler thread to handler new message.
+	pthread_t thread;
+	int k = pthread_create(&thread, NULL, msg_handler_thread, NULL);
+	if(k != 0)
+		log_msg("msg_handler_thread create unsuccessfully");
+	else 
+		log_msg("msg_handler_thread create successfully");
 
 	fd_set rset, allset;
 	int maxfd = listenfd;
@@ -168,20 +188,35 @@ int main(int argc, char *argv[])
 			if(errno == EINTR)
 				continue;
 			else
-				log_quit("select error");
+				log_sys("select error");
 		}
 		if(FD_ISSET(listenfd, &rset)) //a new client connected
 		{
 			// accept the request from the client
-			int clientfd = accept(listenfd, NULL ,NULL);
-            
-			SSL *ss = ssl_server(ctx, clientfd);
+			sockaddr_in client_addr;
+			socklen_t len = sizeof(client_addr);
+			memset(&client_addr, 0, len);
+			char dst[MAXLINE];// the address of the conenected client.
+			int clientfd = accept(listenfd, (sockaddr*)&client_addr,&len);
+            if(clientfd < 0)
+			{
+	 			log_ret("accept error");
+				continue; 
+			}
+			if(inet_ntop(AF_INET,&client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
+				log_msg("client %s was connected", dst);
+			SSL *ss = ssl_server(ctx_server, clientfd);
+			int x = SSL_read(ss, dst, MAXLINE);
+			if(x < 0)
+				log_sys("SSL_read error");
+			dst[x] = '\0';
+			log_msg("%s", dst);
 			if(ss != NULL)
 			{
-				connected_clients.insert(make_pair(clientfd, ss));
+	 			connected_clients.insert(make_pair(clientfd, ss));
 				FD_SET(clientfd, &allset); // add the new connection to the set.
 				if(clientfd > maxfd)
-					maxfd = clientfd;
+ 	 				maxfd = clientfd; 
 			}
 			else 
 				log_msg("ssl_server error");
@@ -198,7 +233,8 @@ int main(int argc, char *argv[])
 		}
 		if(nready == 0)
 			continue;
-		
+
+		// traverse all the connected clients to see whether they are ready.	
 		for(unordered_map<int, SSL *>::iterator iter = connected_clients.begin();
 				iter != connected_clients.end();)
 		{
@@ -206,26 +242,34 @@ int main(int argc, char *argv[])
 			{
 				char  message[MAXLINE+1];
 				int n = SSL_read(iter->second, message, MAXLINE);
+				if(n < 0)
+					n = 0;
 				message[n] = '\0';
+				log_msg("%s", message);
 				all_msgs.push_msg(iter->second, message);// push the message to the message queue.
 				// the connection was terminted. so close the file descriptor.
-				if(n == 0)
+				if(n == 0 || strcmp(message, "signout") == 0)
 				{
+					SSL_shutdown(iter->second);
 					close(iter->first);
 					FD_CLR(iter->first, &allset);
 					unordered_map<int, SSL *>::iterator iter_temp = iter++;
-					connected_clients.erase(iter_temp);
+ 	 				connected_clients.erase(iter_temp);
 				}
 				else
 					++iter;
 				// no ready clients anymore
 				if(--nready == 0)
-					break;
+ 	 				break; 
 			}
 			else
 				++iter;
 		}
 	}
+	close(listenfd);
+	close(statusfd);
+	SSL_CTX_free(ctx_server);
+	SSL_CTX_free(ctx_client);
 	exit(0);
 }
 

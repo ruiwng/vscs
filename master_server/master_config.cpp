@@ -89,7 +89,7 @@ int master_configure(char *redis_address, char *redis_port,
 		}
 		else if(strcmp(name, "MASTER_STATUS_PORT") == 0) // configuration of the master status port
 		{
-			if(*slave_status_port != '\0')
+			if(*master_status_port != '\0')
 			{
 			   log_msg("master_configure: MASTER_STATUS_PORT duplicate configured");
 			   return -1;
@@ -122,7 +122,10 @@ int master_configure(char *redis_address, char *redis_port,
 	}
 	if(*redis_address == '\0' || *redis_port == '\0' || slave_array.empty() || *slave_port == '\0'
 			|| *master_port == '\0' || *slave_status_port == '\0' || *master_status_port == '\0')
+	{
+		log_msg("master_configure: unconfigured argument exist");
 		return -1;
+	}
 	return 0;
 }
 
