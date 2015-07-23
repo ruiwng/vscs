@@ -133,7 +133,10 @@ int read_s(int fd, void *buf, int count);
 
 //return null if fail, certificate indicates the certificate file.
 //key refer to the private key.
-SSL_CTX *ssl_init(const char *certificate, const char *key);
+SSL_CTX *ssl_server_init(const char *certificate, const char *key);
+
+//return null if fail
+SSL_CTX *ssl_client_init();
 
 // the server's SSL, if success return SSL*, otherwise return NULL
 SSL* ssl_server(SSL_CTX *ctx, int sockfd);
