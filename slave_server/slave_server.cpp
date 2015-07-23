@@ -10,7 +10,9 @@
 
 bool stop = false; //whether stop the execution of the slave server or not.
 
-SSL_CTX *ctx;
+SSL_CTX *ctx_server;
+SSL_CTX *ctx_client;
+
 char client_transmit_port[MAXLINE];  // the file transmit port to the client
 
 char slave_port[MAXLINE]; // port of the slave server.
@@ -29,7 +31,7 @@ unordered_set<string> upload_array;
 
 void query_status(int sockfd)
 {
-	SSL *ssl = ssl_server(ctx, sockfd);
+	SSL *ssl = ssl_server(ctx_server, sockfd);
 	if(ssl == NULL)
 	{
 		log_msg("query_status: ssl_server error");
@@ -79,9 +81,13 @@ int main(int argc, char *argv[])
 	log_msg("slave server configure successfully");
 
 	// initialize the SSL
-	ctx = ssl_init(ssl_certificate, ssl_key);
-	if(ctx == NULL)
-		log_quit("SSL initialize failed");
+	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
+	if(ctx_server == NULL)
+		log_quit("SSL server initialize failed");
+	ctx_client = ssl_client_init();
+	if(ctx_client == NULL)
+		log_quit("SSL client initialize failed");
+
 	log_msg("SSL initialize successfully");
 
 	//iniitialize the mutex.
@@ -89,7 +95,7 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&upload_mutex, NULL);
 	
 	//daemoize the process
-	daemonize("slave_server");
+	daemonize("vscs_slave");
 	// listen to the master's connection
 	int listenfd = server_listen(slave_port);
 	if(listenfd == -1)
@@ -143,6 +149,11 @@ int main(int argc, char *argv[])
 				query_status(masterfd);
 		}
 	}
+	close(listenfd);
+	close(statusfd);
+
+	SSL_CTX_free(ctx_server);
+	SSL_CTX_free(ctx_client);
 	return 0;
 }
 

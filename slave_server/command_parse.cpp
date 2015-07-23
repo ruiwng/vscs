@@ -7,7 +7,7 @@
 #include  "vscs.h"
 #include  "command_parse.h"
 
-extern SSL_CTX *ctx;
+extern SSL_CTX *ctx_client;
 extern char *client_transmit_port;
 extern char *store_dir;
 // to realize the exclusive access to the download arary.
@@ -43,8 +43,8 @@ static void delete_file(char *command_line)
 //the client download file from the master server.
 static void *download_thread(void *command_line)
 {
-	char ip_addr[MAXBUF], user_name[MAXBUF], file_name[MAXBUF];
-	if(sscanf((char *)command_line, ip_addr, user_name, file_name) != 3)
+	char ip_addr[MAXBUF], file_name[MAXBUF], user_name[MAXBUF];
+	if(sscanf((char *)command_line, ip_addr, file_name, user_name) != 3)
 	{
 		free(command_line);
 		log_msg("download_thread: parse command unsuccessfully");
@@ -69,7 +69,7 @@ static void *download_thread(void *command_line)
 		return NULL;
 	}
 	
-	SSL *ssl = ssl_client(ctx, sock_fd);
+	SSL *ssl = ssl_client(ctx_client, sock_fd);
 
 	if(ssl == NULL)
 	{
@@ -83,11 +83,11 @@ static void *download_thread(void *command_line)
 	char str_buf[MAXBUF];
 	int nread;
 	struct stat s;
-	fstat(fileno(p_file));
-	snprintf(str_buf,"download %s %d", file_name, s.st_size);
-	if(SSL_write(ssl, str_buf, strlen(str_buf)) != strlen(str_buf))
+	fstat(fileno(p_file), &s);
+	snprintf(str_buf,MAXBUF, "download %s %d", file_name,(int)s.st_size);
+	if(SSL_write(ssl, str_buf, strlen(str_buf)) != (int)strlen(str_buf))
 	{
-		fcloe(p_file);
+		fclose(p_file);
 		SSL_shutdown(ssl);
 		close(sock_fd);
 		SSL_free(ssl);
@@ -153,9 +153,9 @@ static void *download_thread(void *command_line)
 // the client upload file to the slave server.
 static void *upload_thread(void *command_line)
 {
-	char ip_addr[MAXLINE], user_name[MAXLINE], file_name[MAXLINE];
+	char ip_addr[MAXLINE], file_name[MAXLINE], user_name[MAXLINE];
 	//get the ip address user name, and file name of the client.
-	if(sscanf((char*)command_line, "%s%s%s", ip_addr, user_name, file_name) != 3)
+	if(sscanf((char*)command_line, "%s%s%s", ip_addr, file_name, user_name) != 3)
 	{
 		free(command_line);
 		log_msg("upload_thread: parse command unsuccessfully");
@@ -194,7 +194,7 @@ static void *upload_thread(void *command_line)
 	}
 	//start to receive the file
 	SSL *ssl;
-	ssl = ssl_client(ctx, sock_fd);
+	ssl = ssl_client(ctx_client, sock_fd);
 
 	if(ssl == NULL)
 	{
@@ -240,7 +240,7 @@ static void *upload_thread(void *command_line)
 		return NULL;
 	}
 	int upload_bytes;
-	int m = sscanf(str_buf, "%d",&upload_bytes);
+	sscanf(str_buf, "%d",&upload_bytes);
 	SSL_write(ssl, "OK", strlen("OK"));
 	// add the upload job to the upload array.
 	pthread_mutex_lock(&upload_mutex);
@@ -261,7 +261,7 @@ static void *upload_thread(void *command_line)
 				SSL_shutdown(ssl);
 				close(sock_fd);
 				SSL_free(ssl);
-				return  NULL; 
+	 			return  NULL; 
 			}
 		}
 		if(nread == 0) // connection to the client was broken.
@@ -296,8 +296,8 @@ static void *upload_thread(void *command_line)
 //parse the command received from the master server.
 void command_parse(const char *command_line)
 {
-	int command;
-	if(sscanf(command_line, "%d", &command) != 1)
+	char command[MAXLINE];
+	if(sscanf(command_line, "%s", command) != 1)
 	{
 		log_msg("command_parse: parse command unsuccessfully");
 		return;
@@ -314,22 +314,16 @@ void command_parse(const char *command_line)
 	char *q = (char *)malloc(strlen(p) + 1);
 	strcpy(q, p);
 	pthread_t thread;
-	switch(command)
+	if(strcmp(command,"remove") == 0) //remove a file
+		delete_file(q);
+	else if(strcmp(command, "download") == 0) // download a file from the slave server
+		pthread_create(&thread, NULL, download_thread, (void *)q);
+	else if(strcmp(command, "upload") == 0) // upload a file to the slave server.
+		pthread_create(&thread, NULL, upload_thread, (void *)q);
+	else // unknown command
 	{
-		case REMOVE_FILE: //remove a file
-			delete_file(q);
-			break;
-		case DOWNLOAD_FILE://download a file from the slave server
-			pthread_create(&thread, NULL, download_thread, (void *)q);
-			break;
-		case UPLOAD_FILE://upload a file to the slave server
-			pthread_create(&thread, NULL, upload_thread, (void *)q);
-			break;
-		default:// unknown command
-			{
-				free(q); 
-				log_msg("command_parse: unknown command");
-				return;   
-			}
+		free(q);
+		log_msg("command_parse: unknown command");
+		return;
 	}
 }
