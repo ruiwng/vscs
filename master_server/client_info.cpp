@@ -45,11 +45,13 @@ void client_info::get_filelist()
 	char reply[MAXLINE];
 	snprintf(query, MAXLINE, "get %s%s\n", USER_PREFIX,client_name.c_str());
 	int len = strlen(query);
-	if(writen(sock_db, query, len) != len||read_s(sock_db, reply, MAXLINE) < 0)
+	int k;
+	if(writen(sock_db, query, len) != len||(k = read_s(sock_db, reply, MAXLINE)) < 0)
 	{		
 		log_msg("%s get_filelist unsuccessfully",client_name.c_str());
 		return;
 	}
+	reply[k] = '\0';
 	int str_length;
 	sscanf(reply,"$%d\n",&str_length);
 	if(str_length == -1)// the file list doesn't exist.
@@ -222,7 +224,8 @@ int user_login(int sockdb, const char *name, const char *passwd)
 	int k;
 	sscanf(reply,"$%d", &k);
 	char *p=strchr(reply,'\n')+1;
-	if(strncmp(p,passwd,k)==0)
+	p[k] = '\0';
+	if(strcmp(p,passwd)==0)
 		return OK;
 	else
 		return WRONG_PASSWD;

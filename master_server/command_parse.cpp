@@ -66,7 +66,7 @@ void command_parse(SSL *ssl,const char *command_line)
 		if(ssl_writen(ssl, message, len) != len)
 			log_msg("command_parse: SSL_write error");
 	}
-	else if(strcmp(command, "signout") == 0) // signout
+	else if(*command == '\0' || strcmp(command, "signout") == 0) // signout
 	{
 		if( n != 1)
 			strcpy(message, "wrong command\n");
@@ -199,7 +199,7 @@ void command_parse(SSL *ssl,const char *command_line)
 		else
 		{
 			char storage[MAXLINE];
-			int k = iter->second->query_file_storage(arg2, storage);
+			int k = iter->second->query_file_storage(arg1, storage);
 			if(k == FILE_NOT_EXIST) // the file not exist in the database.
 				strcpy(message, "file not exist\n");
 			else
@@ -215,12 +215,12 @@ void command_parse(SSL *ssl,const char *command_line)
 					if(ssl_writen(iter_temp->second, temp, x) != x) // send the slave server the message to delete a file.
 					{
 						log_msg("command_parse: ssl_writen error");
-				 	  	snprintf(message, MAXLINE, "%s delete error\n", arg2);
+				 	  	snprintf(message, MAXLINE, "%s delete error\n", arg1);
 					}
 					else
 					{
-					  	snprintf(message, MAXLINE, "%s deleted\n", arg2);
-						iter->second->delete_file(arg2); 
+					  	snprintf(message, MAXLINE, "%s deleted\n", arg1);
+						iter->second->delete_file(arg1); 
 				  	 } 
 				}   
 			}
