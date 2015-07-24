@@ -21,7 +21,7 @@
 #include  <pthread.h>   /* for pthread_create */
 #include  <netdb.h>    /* inclusion for getaddrinfo */
 #include  <fcntl.h>  /* for open and fcntl */
-
+#include  <sys/ioctl.h> /* for ioctl */
 //for ssl
 #include  <openssl/rsa.h>
 #include  <openssl/crypto.h>
@@ -149,4 +149,7 @@ int ssl_readn(SSL *, void *vptr, int n);
 
 // write n characters to SSL*.
 int ssl_writen(SSL *, const void *vptr, int n);
+
+// high resolution sleep
+void sleep_us(unsigned int nusecs);
 #endif /* VSCS_H */
