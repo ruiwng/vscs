@@ -7,6 +7,14 @@
 #ifndef   COMMAND_PARSE_H
 #define   COMMAND_PARSE_H
 
+//delete a file
+void delete_file(char *command_line);
+
+//the client download file from the master server.
+void *download_thread(void *command_line);
+
+//the client upload file to the slave server.
+void *upload_thread(void *command_line);
 //parse the command
 void command_parse(const char *command_line);
 

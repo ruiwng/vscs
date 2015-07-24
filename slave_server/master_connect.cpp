@@ -48,6 +48,7 @@ void *master_connect_thread(void *arg)
 		else// parse the command
 		{
 			recvline[nread] = '\0';
+			log_msg("master_thread: %s", recvline);
 			command_parse(recvline);
 		}
 	}

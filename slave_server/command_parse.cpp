@@ -8,8 +8,8 @@
 #include  "command_parse.h"
 
 extern SSL_CTX *ctx_client;
-extern char *client_transmit_port;
-extern char *store_dir;
+extern char client_transmit_port[MAXLINE];
+extern char store_dir[MAXLINE];
 // to realize the exclusive access to the download arary.
 extern pthread_mutex_t download_mutex;
 extern unordered_set<string> download_array;
@@ -19,10 +19,12 @@ extern pthread_mutex_t upload_mutex;
 extern unordered_set<string> upload_array;
 
 // delete a file
-static void delete_file(char *command_line)
+void delete_file(char *command_line)
 {
-	char user_name[MAXBUF + 1], file_name[MAXBUF + 1];
-	if(sscanf(command_line, "%s%s", user_name, file_name) != 2)
+	log_msg("enter delete_file");
+	log_msg("store_dir %s", store_dir);
+	char user_name[MAXBUF], file_name[MAXBUF];
+	if(sscanf(command_line, "%s%s", file_name, user_name) != 2)
 	{
 		log_msg("delete_file: parse command unsuccessfully");
 		free(command_line);
@@ -41,11 +43,12 @@ static void delete_file(char *command_line)
 }
 
 //the client download file from the master server.
-static void *download_thread(void *command_line)
+void *download_thread(void *command_line)
 {
 	char ip_addr[MAXBUF], file_name[MAXBUF], user_name[MAXBUF];
-	if(sscanf((char *)command_line, ip_addr, file_name, user_name) != 3)
+	if(sscanf((char *)command_line, "%s%s%s",ip_addr, file_name, user_name) != 3)
 	{
+		log_msg("download_thread: %s", command_line);
 		free(command_line);
 		log_msg("download_thread: parse command unsuccessfully");
 		return NULL;
@@ -68,7 +71,6 @@ static void *download_thread(void *command_line)
 		log_msg("download_thread: can't connect to %s:%s", ip_addr, client_transmit_port);
 		return NULL;
 	}
-	
 	SSL *ssl = ssl_client(ctx_client, sock_fd);
 
 	if(ssl == NULL)
@@ -120,7 +122,7 @@ static void *download_thread(void *command_line)
 	pthread_mutex_unlock(&download_mutex);
 
 	//start to transmit the file
-	while((nread = fread(str_buf, sizeof(char), MAXBUF, p_file) > 0))
+	while((nread = fread(str_buf, sizeof(char), MAXBUF, p_file)) > 0)
 	{
 		if(SSL_write(ssl, str_buf, nread) != nread)
 		{
@@ -151,8 +153,9 @@ static void *download_thread(void *command_line)
 }
 
 // the client upload file to the slave server.
-static void *upload_thread(void *command_line)
+void *upload_thread(void *command_line)
 {
+	 log_msg("upload_thread: %s start", command_line);
 	char ip_addr[MAXLINE], file_name[MAXLINE], user_name[MAXLINE];
 	//get the ip address user name, and file name of the client.
 	if(sscanf((char*)command_line, "%s%s%s", ip_addr, file_name, user_name) != 3)
@@ -162,9 +165,11 @@ static void *upload_thread(void *command_line)
 		return NULL;
 	}
 	free(command_line);
+	log_msg("upload_thread: %s", store_dir);
 	char file[MAXBUF];
 	// establish the directory to store files of the client.
 	snprintf(file, MAXBUF, "%s/%s/", store_dir, user_name);
+	log_msg("upload_thread: file directory %s", file);
 	if(mkdir(file, DIR_MODE) < 0)
 	{
 		if(errno != EEXIST)
@@ -174,6 +179,7 @@ static void *upload_thread(void *command_line)
 		}
 	}
 	strcat(file, file_name);
+	log_msg("upload_thread: file name %s", file);
 	// open the uploaded file to write.
 	FILE *p_file;
 	if((p_file = fopen(file, "w")) == NULL)
@@ -206,9 +212,10 @@ static void *upload_thread(void *command_line)
 	}
 	char str_buf[MAXBUF];
 	int nread;
-
 	snprintf(str_buf, MAXBUF, "upload %s", file_name);
-	if(SSL_write(ssl, str_buf, strlen(str_buf) != strlen(str_buf)))
+	log_msg("upload_thread: %s", str_buf);
+	int len = strlen(str_buf);
+	if(SSL_write(ssl, str_buf, len) != len)
 	{
 		unlink(file);
 		fclose(p_file);
@@ -218,6 +225,7 @@ static void *upload_thread(void *command_line)
 		log_msg("upload_thread: SSL_write error");
 		return NULL;
 	}
+	log_msg("upload_thread: %s", str_buf);
 	if((nread = SSL_read(ssl, str_buf, MAXBUF)) < 0)
 	{
 		unlink(file);
@@ -229,6 +237,7 @@ static void *upload_thread(void *command_line)
 		return NULL;
 	}
 	str_buf[nread] = '\0';
+	log_msg("upload_thread: %s",str_buf);
 	if(strcmp(str_buf,"ERR") == 0)
 	{
 		unlink(file);
@@ -255,7 +264,7 @@ static void *upload_thread(void *command_line)
 				continue;
 			else
 			{
-				log_ret("upload_thread: SSL_read error");
+			 	log_ret("upload_thread: SSL_read error");
 				unlink(file);
 				fclose(p_file);
 				SSL_shutdown(ssl);
@@ -296,6 +305,7 @@ static void *upload_thread(void *command_line)
 //parse the command received from the master server.
 void command_parse(const char *command_line)
 {
+	log_msg("command_parse: %s", command_line);
 	char command[MAXLINE];
 	if(sscanf(command_line, "%s", command) != 1)
 	{
@@ -314,14 +324,25 @@ void command_parse(const char *command_line)
 	char *q = (char *)malloc(strlen(p) + 1);
 	strcpy(q, p);
 	pthread_t thread;
-	if(strcmp(command,"remove") == 0) //remove a file
+	log_msg("q information: %s, command %s", q, command);
+	if(strcmp(command,"delete") == 0) //remove a file
+	{
+		log_msg("delete route");
 		delete_file(q);
+	}
 	else if(strcmp(command, "download") == 0) // download a file from the slave server
+	{
+		log_msg("download route");
 		pthread_create(&thread, NULL, download_thread, (void *)q);
+	}
 	else if(strcmp(command, "upload") == 0) // upload a file to the slave server.
+	{
+		log_msg("upload route");
 		pthread_create(&thread, NULL, upload_thread, (void *)q);
+	}
 	else // unknown command
 	{
+		log_msg("unknown route");
 		free(q);
 		log_msg("command_parse: unknown command");
 		return;

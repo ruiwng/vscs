@@ -77,7 +77,6 @@ int main(int argc, char *argv[])
 	if(slave_configure(slave_port, slave_status_port, client_transmit_port,
 				 ssl_certificate, ssl_key, store_dir) == -1)
 		log_quit("slave server configure failed");
-
 	log_msg("slave server configure successfully");
 
 	// initialize the SSL
