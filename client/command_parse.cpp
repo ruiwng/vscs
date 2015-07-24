@@ -6,12 +6,14 @@
  ************************************************************************/
 #include  "vscs.h"
 #include  "command_parse.h"
+#include  "transmit_file.h"
 #include  "client.h"
 #include  <termios.h>
 #include  <curses.h>
 
 extern bool stop;
-
+extern bool status_query;
+pthread_t thread;
 //exclusive access to the download array.
 extern pthread_mutex_t download_mutex;
 extern unordered_map<string, record> download_array; // all download files
@@ -103,6 +105,11 @@ void command_parse(SSL *ssl, char *command_line)
 		snprintf(message, MAXLINE, "signin %s %s", arg, password);
 		SSL_write(ssl, message, strlen(message));
 		int k = SSL_read(ssl, message, MAXLINE);
+		if(k < 0)
+		{
+			printf("SSL_read error");
+			return;
+		}
 		message[k] = '\0';
 		printf("%s", message);
 	}
@@ -239,6 +246,10 @@ void command_parse(SSL *ssl, char *command_line)
 			printf("wrong command\n");
 			return;
 		}
+		status_query = true;
+		pthread_create(&thread, NULL, status_thread, NULL);
+		getchar();
+		status_query = false;
 	}
 	else 
 		printf("command not found\n");

@@ -6,6 +6,8 @@
  ************************************************************************/
 #ifndef   TRANSMIT_FILE_H
 #define   TRANSMIT_FILE_H
+// query the status of the download/upload files.
+void* status_thread(void *arg);
 
 // the thread to download a file.
 void *download_thread(void *arg);
