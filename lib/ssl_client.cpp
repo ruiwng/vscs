@@ -22,7 +22,7 @@ SSL* ssl_client(SSL_CTX *ctx, int sockfd)
 
 	if(ret == -1)
 	{
-		log_msg("ssl_client: SSL_accept error");
+		log_msg("ssl_client: SSL_connect error");
 		return NULL;
 	}
 

@@ -27,9 +27,9 @@ int client_connect(const char *address, const char *port)
 	for(rp = result; rp != NULL; rp = rp->ai_next)
 	{
 		sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-		if(sockfd == -1)
+		if(sockfd < 0)
 			continue;
-		if(connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1)
+		if(connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0)
 			break; /* success */
 		
 		close(sockfd);
