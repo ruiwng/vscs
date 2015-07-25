@@ -55,7 +55,7 @@ void daemonize(const char *cmd)
 	 */
 	if(rl.rlim_max == RLIM_INFINITY)
 		rl.rlim_max = 1024;
-	for(unsigned int i = 0; i< rl.rlim_max;++i)
+	for(unsigned int i = 0; i< 3;++i)
 		close(i);
 
 	/*
