@@ -19,10 +19,10 @@ extern pthread_mutex_t upload_mutex;
 extern unordered_map<string, record> upload_array; // all upload files.
 
 //get the progress of the upload/download files.
-void get_progress(const char *file_name, int prev, int curr, int sum, char *result)
+void get_progress(const char *operation, const char *file_name, long long prev, long long curr, long long sum, char *result)
 {
 	int pos = (double)curr/sum*50;
-	snprintf(result, MAXLINE, "%-30s",file_name);
+	snprintf(result, MAXLINE, "%-13s%-30s", operation, file_name);
 	char *p = result + strlen(result);
 	*p++ = '[';
 	for(int i = 0; i < pos; ++i)
@@ -32,8 +32,8 @@ void get_progress(const char *file_name, int prev, int curr, int sum, char *resu
 		*p++ = ' ';
 	*p++ = ']';
 
-	stack<int> num_stack;
-	int num = curr;
+	stack<long long> num_stack;
+	long long num = curr;
 	do
 	{
 		num_stack.push(num%1000);
@@ -41,24 +41,35 @@ void get_progress(const char *file_name, int prev, int curr, int sum, char *resu
 	}while(num != 0);
 	char temp[MAXLINE];
 	char *q = temp;
+	bool first = true;
 	while(num_stack.size() != 1)
 	{
-		sprintf(q, "%03d,",num_stack.top());
+		if(first)
+		{
+			first = false;
+			sprintf(q, "%3lld,", num_stack.top());
+		}
+		else
+		    sprintf(q, "%03lld,",num_stack.top());
 		num_stack.pop();
 		q += strlen(q);
 	}
-	sprintf(q, "%03d", num_stack.top());
-	sprintf(p, "%20s", temp);
+	if(first)
+	{
+		first = false;
+		sprintf(q, "%3lld,", num_stack.top());
+	}
+	else
+	    sprintf(q, "%03lld", num_stack.top());
+	sprintf(p, "%15s", temp);
 	p += strlen(p);
-	snprintf(temp, MAXLINE, "%20.1lfK/s", (double)(curr - prev)/500);
+	snprintf(temp, MAXLINE, "%15.1lfK/s\n", (double)(curr - prev)/500);
 	strcpy(p, temp); 
 }
 
 // query the status of the download/upload files.
 void* status_thread(void *arg)
 {
-	struct winsize *ws;
-	ws = (struct winsize*)malloc(sizeof(struct winsize));
 	//initialize the prev size.
 	pthread_mutex_lock(&download_mutex);
 	//update the prev to the current in the download array.
@@ -75,23 +86,23 @@ void* status_thread(void *arg)
 	pthread_mutex_unlock(&upload_mutex);
 	sleep_us(500000);
 	bool empty = false;
+	int move_up;
 	while(status_query)
 	{
+		move_up = 0;
 		string result;
-		memset(ws, 0, sizeof(struct winsize));
-		ioctl(STDIN_FILENO, TIOCGWINSZ, ws);
-		int width = ws->ws_col;
 		char temp[MAXLINE];
 		pthread_mutex_lock(&download_mutex);
 		if(download_array.empty())
 			empty = true;
+		// show the progress of downloading files.
 		for(unordered_map<string, record>::iterator iter= download_array.begin(); iter != download_array.end();
 				++ iter)
 		{
-			get_progress(iter->first.c_str(), iter->second.prev, iter->second.current, iter->second.sum, temp);
+			get_progress("downloading", iter->first.c_str(), iter->second.prev, iter->second.current, iter->second.sum, temp);
 			iter->second.prev = iter->second.current;
 			result += temp;
-			result += string(width - strlen(temp),' ');
+		    ++move_up;
 		}
 		pthread_mutex_unlock(&download_mutex);
 		pthread_mutex_lock(&upload_mutex);
@@ -99,28 +110,33 @@ void* status_thread(void *arg)
 			empty = true;
 		else
 			empty = false;
+		// show the progress of uploading files.
 		for(unordered_map<string, record>::iterator iter = upload_array.begin(); iter != upload_array.end();
 				++ iter)
 		{
-			get_progress(iter->first.c_str(), iter->second.prev, iter->second.current, iter->second.sum, temp);
+			get_progress("uploading", iter->first.c_str(), iter->second.prev, iter->second.current, iter->second.sum, temp);
 			iter->second.prev = iter->second.current;
 			result += temp;
-			result += string(width - strlen(temp), ' ');
+			++move_up;
 		}
 		pthread_mutex_unlock(&upload_mutex);
 		if(empty)
 			break;
-		result += "\r";
+		
 		printf("%s", result.c_str());
 		fflush(stdout);
 		sleep_us(500000);
+        for(int i = 0;i < move_up; ++i)
+		{
+			printf("\033[1A");
+			printf("\033[K");
+		}
 	}
 	if(empty)
 	{
-		printf("\nno download/upload files\n");
+		printf("no download/upload files");
 		status_query = false;
 	}
-	free((void*)ws);
 	return NULL;
 }
 // download file from the slave server.
@@ -139,7 +155,8 @@ void *download_thread(void *arg)
 	}
 	SSL_write(down_arg->ssl, "OK", strlen("OK"));
 	char str_buf[MAXBUF];
-	int nread, download_bytes = 0;
+	int nread;
+	long long download_bytes = 0;
 	int k = 0;
 	while(true)
 	{
@@ -216,10 +233,10 @@ void *upload_thread(void *arg)
 		printf("upload_thread: open %s for read unsuccessfully\n", up_arg->file_name);
 		return NULL;
 	}
-	printf("start to upload %s\n", up_arg->file_name);
 	char str_buf[MAXBUF];
-	int nread, upload_bytes = 0;
-	snprintf(str_buf, MAXBUF, "%d", up_arg->iter->second.sum);
+	int nread;
+	long long upload_bytes = 0;
+	snprintf(str_buf, MAXBUF, "%lld", up_arg->iter->second.sum);
 	SSL_write(up_arg->ssl, str_buf, strlen(str_buf));
 	if((nread = SSL_read(up_arg->ssl, str_buf, MAXBUF)) < 0)
 	{

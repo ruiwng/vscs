@@ -54,8 +54,8 @@ void *transmit_thread(void *arg)
 		int n = SSL_read(ssl, message, MAXLINE);
 		message[n] = '\0';
 		char command[MAXLINE], file_name[MAXLINE];
-		int file_size;
-		int k = sscanf(message,"%s%s%d", command, file_name, &file_size);
+		long long file_size;
+		int k = sscanf(message,"%s%s%lld", command, file_name, &file_size);
 
 		bool exist = false;
 		if(strcmp(command, "upload") == 0)

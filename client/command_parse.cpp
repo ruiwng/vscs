@@ -181,19 +181,20 @@ void command_parse(SSL *ssl, char *command_line)
 			return;
 		}
 		// add the file to be uploaded to the upload array.
-		struct stat buf;
+		struct stat64 buf;
 		int file = open(arg,FILE_MODE);
 		if(file < 0)
 		{
 			printf("file %s not exist\n", arg);
 			return;
 		}
-		fstat(file, &buf);
+		memset(&buf, 0, sizeof(buf));
+		fstat64(file, &buf);
 		pthread_mutex_lock(&upload_mutex);
 		upload_array.insert(make_pair(arg, record(buf.st_size)));
 		pthread_mutex_unlock(&upload_mutex);
 		close(file);
-		snprintf(message, MAXLINE, "upload %s %s %d",ip_address, arg, (int)buf.st_size);
+		snprintf(message, MAXLINE, "upload %s %s %lld",ip_address, arg, (long long)buf.st_size);
 		int len = strlen(message);
 
 		if(ssl_writen(ssl, message, len) != len)
@@ -248,7 +249,17 @@ void command_parse(SSL *ssl, char *command_line)
 		}
 		status_query = true;
 		pthread_create(&thread, NULL, status_thread, NULL);
+		struct termios newt, oldt;
+		// save terminal settings
+		tcgetattr(0, &oldt);
+		// init new settings
+		newt = oldt;
+		//change settings
+		newt.c_lflag &= ~(ICANON | ECHO);
+		//apply settings
+		tcsetattr(0, TCSANOW, &newt);
 		getchar();
+		tcsetattr(0, TCSANOW, &oldt);
 		status_query = false;
 	}
 	else 

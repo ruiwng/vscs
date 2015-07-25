@@ -14,10 +14,10 @@
 
 struct record
 {
-	int sum;
-	int current;
-	int prev;
-	record(int s=0, int c=0, int p=0):sum(s),current(c),prev(p){}
+	long long sum;
+	long long current;
+	long long prev;
+	record(long long s=0, long long  c=0, long long p=0):sum(s),current(c),prev(p){}
 };
 
 // the argument that transmit_thread pass to the download/upload thread.
