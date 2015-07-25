@@ -17,9 +17,9 @@ extern unordered_map<string, SSL*>::iterator current_iterator; // the very itera
 void command_parse(SSL *ssl,const char *command_line)
 {
 	char command[MAXLINE], arg1[MAXLINE], arg2[MAXLINE];
-	int arg3;
+	long long arg3;
 	char message[MAXLINE];
-	int n = sscanf(command_line, "%s%s%s%d", command, arg1, arg2, &arg3);
+	int n = sscanf(command_line, "%s%s%s%lld", command, arg1, arg2, &arg3);
 
 	// whether or not the user has login.
 	unordered_map<SSL *,client_info*>::iterator iter = signin_users.find(ssl);

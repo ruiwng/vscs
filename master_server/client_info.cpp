@@ -19,7 +19,7 @@ client_info::~client_info()
 }
 
 //add a file correpsonding to the current user.
-int client_info::add_file(const char *name, int file_size,const char *storage)
+int client_info::add_file(const char *name, long long file_size,const char *storage)
 {
 	unordered_map<string,info>::iterator iter = file_storage.find(name);
 	if(iter != file_storage.end())
@@ -76,8 +76,8 @@ void client_info::get_filelist()
 	p_mem[str_length] = '\0';
 
 	char file_name[MAXLINE], storage[MAXLINE];
-	int file_size;
-	while(sscanf(p_mem, "%s %s %d", file_name, storage, &file_size) == 3)
+	long long file_size;
+	while(sscanf(p_mem, "%s %s %lld", file_name, storage, &file_size) == 3)
 	{
 		file_storage.insert(make_pair(file_name,info(storage,file_size)));
 		p_mem = strchr(p_mem,'\n');
@@ -101,7 +101,7 @@ int client_info::restore_filelist() const
 	for(unordered_map<string,info>::const_iterator iter=file_storage.begin();
 			iter != file_storage.end(); ++iter)
 	{
-		snprintf(temp, MAXLINE, "%d", iter->second.file_size);
+		snprintf(temp, MAXLINE, "%lld", iter->second.file_size);
 		result+=iter->first+" "+iter->second.storage+" "+temp+"\\n";
 	}
 	string query = string("set ")+USER_PREFIX+client_name+" \""+result+"\"\n";
@@ -141,7 +141,7 @@ char *client_info::show_filelist() const
 			iter!=file_storage.end();++iter)
 	{
 		char size[MAXLINE];
-		snprintf(size, MAXLINE,"%dMB", iter->second.file_size);
+		snprintf(size, MAXLINE,"%lldMB", iter->second.file_size);
 		result+=iter->first+" "+size+"\n";
 	}
 	if(result.empty())

@@ -18,8 +18,8 @@ private:
 struct info
 {
 	string storage;
-	int file_size;
-	info(const string& stor, int size):storage(stor),file_size(size){}
+	long long file_size;
+	info(const string& stor, long long size):storage(stor),file_size(size){}
 };
 public:
 	client_info(int sockdb,const char *name);
@@ -27,7 +27,7 @@ public:
 
 public:
 	//add a file correspending to the current user.
-	int add_file(const char *file_name, int file_size, const char *storage);
+	int add_file(const char *file_name, long long file_size, const char *storage);
 	//delete a file corresponding to the current user.
 	int delete_file(const char *file_name);
 	//show the file list of the current user.
@@ -40,7 +40,7 @@ private:
 	int restore_filelist() const;
 private:
 	unordered_map<string,info> file_storage; // file name vs its info
-	int total_file_size; // the size of all the files of the current user.
+	long long total_file_size; // the size of all the files of the current user.
 	const int sock_db; /* the socket connect to the db */
 	const string client_name; /* the name of the user */
 };
