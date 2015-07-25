@@ -84,9 +84,9 @@ void *download_thread(void *command_line)
 	// to make sure this is the very file that the client want to download.
 	char str_buf[MAXBUF];
 	int nread;
-	struct stat s;
-	fstat(fileno(p_file), &s);
-	snprintf(str_buf,MAXBUF, "download %s %d", file_name,(int)s.st_size);
+	struct stat64 s;
+	fstat64(fileno(p_file), &s);
+	snprintf(str_buf,MAXBUF, "download %s %lld", file_name,(long long)s.st_size);
 	if(SSL_write(ssl, str_buf, strlen(str_buf)) != (int)strlen(str_buf))
 	{
 		fclose(p_file);
@@ -248,8 +248,8 @@ void *upload_thread(void *command_line)
 		log_msg("upload_thread: strcmp error");
 		return NULL;
 	}
-	int upload_bytes;
-	sscanf(str_buf, "%d",&upload_bytes);
+	long long upload_bytes;
+	sscanf(str_buf, "%lld",&upload_bytes);
 	SSL_write(ssl, "OK", strlen("OK"));
 	// add the upload job to the upload array.
 	pthread_mutex_lock(&upload_mutex);
@@ -264,7 +264,7 @@ void *upload_thread(void *command_line)
 				continue;
 			else
 			{
-			 	log_ret("upload_thread: SSL_read error");
+			 	log_ret(" upload_thread: SSL_read error");
 				unlink(file);
 				fclose(p_file);
 				SSL_shutdown(ssl);
