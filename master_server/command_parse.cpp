@@ -100,7 +100,7 @@ void command_parse(SSL *ssl,const char *command_line)
 		{
 			char *p = iter->second->show_filelist();
 			int k = strlen(p);
-			snprintf(message, MAXLINE, "%d", k);
+			snprintf(message, MAXLINE, "%d\n", k);
 			int len = strlen(message);
 			if(ssl_writen(ssl, message, len) != len)
 				log_msg("command_parse: SSL_write error");
@@ -129,6 +129,8 @@ void command_parse(SSL *ssl,const char *command_line)
 			strcpy(message, "wrong command\n");
 		else if(!signed_in)
 			strcpy(message, "not signed in\n");
+		else if(iter->second->is_file_exist(arg2))
+			snprintf(message, MAXLINE, "file %s already exists.\n", arg2);
 		else
 		{
 			SSL *store = current_iterator->second;

@@ -8,6 +8,7 @@
 #include  "master_config.h"
 #include  "msg_queue.h"
 #include  "command_parse.h"
+#include  "cluster_status.h"
 #include  <unordered_map>
 #include  <string>
 using namespace std;
@@ -51,9 +52,10 @@ void status_query(int sockfd)
 {
 	sockaddr_in servaddr;
 	socklen_t len = sizeof(servaddr);
+	memset(&servaddr, 0, len);
 	getsockname(sockfd, (sockaddr*)&servaddr, &len);
 	char addr[MAXLINE+1];
-	inet_ntop(AF_INET, (void *)&servaddr, addr, MAXLINE);
+	inet_ntop(AF_INET, (void *)&servaddr.sin_addr, addr, MAXLINE);
 	char str[MAXLINE+1];
 	snprintf(str, MAXLINE, "master server: %s\n", addr);
 	writen(sockfd, str, strlen(str));
@@ -64,8 +66,9 @@ void status_query(int sockfd)
 	{
 		sockaddr_in clientaddr;
 		len = sizeof(clientaddr);
+		memset(&clientaddr, 0, len);
 		getpeername(sockfd, (sockaddr*)&clientaddr, &len);
-		inet_ntop(AF_INET, (void *)&clientaddr, addr, MAXLINE);
+		inet_ntop(AF_INET, (void *)&clientaddr.sin_addr, addr, MAXLINE);
 		char str[MAXLINE+1];
 		snprintf(str, MAXLINE,"client %s connected\n", addr);
 		writen(sockfd, str, strlen(str));
@@ -80,8 +83,9 @@ void status_query(int sockfd)
 			log_msg("can't accesss status port of %s", iter->first.c_str());
 			continue;
 		}
-		printf("slave %s\n",iter->first.c_str());
 		char temp[MAXLINE + 1];
+		snprintf(temp, MAXLINE + 1,"slave %s\n",iter->first.c_str());
+		writen(sockfd, temp, strlen(temp));
 		int n;
 		while(true)
 		{
@@ -97,33 +101,42 @@ void status_query(int sockfd)
 
 int main(int argc, char *argv[])
 {
+	if(argc != 2 || (strcmp(argv[1], "start") != 0 && strcmp(argv[1], "status") != 0))
+	{
+		printf("Usage: %s <start/status>\n", argv[0]);
+		return -1;
+	}
+	sleep_us(500000);
 	//read the configure file to get redis adress, redis port, slave server array,
 	//port of the slave server, port of the master server, status port of slave server
 	//status port of master server, certificate of ssl and private key of ssl.
 	if(master_configure(redis_address, redis_port, slave_array, slave_port,
-				master_port, slave_status_port, master_status_port, ssl_certificate,
- 				ssl_key) == -1) 
-		log_quit("master server configure failed");
-
-	log_msg("master server configure successfully");
-
+				master_port,  slave_status_port, master_status_port, ssl_certificate,
+ 				ssl_key ) == -1) 
+		err_quit("%-60s[\033[;31mFAILED\033[0m]", "master server configure");
+	if(strcmp(argv[1], "status") == 0)
+	{
+		cluster_status(master_status_port);
+		return 0;
+	}
+	
+	printf("%-60s[\033[;32mOK\033[0m]\n", "master server configure");
+	sleep_us(500000);
 	// initialize the SSL
 	SSL_CTX *ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
-		log_quit("SSL server initialize failed");
+		err_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL server initialize");
 	SSL_CTX *ctx_client = ssl_client_init();
 	if(ctx_client == NULL)
-		log_quit("SSL client initialize failed");
-	log_msg("SSL initialize successfully");
-
+		err_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL client initialize");
+	printf("%-60s[\033[;32mOK\033[0m]\n", "SSL initialize");
+	
 	// daemonize the master server.
 	daemonize("vscs_master");
-
 	//connect to the redis server.
 	if((sockdb = client_connect(redis_address, redis_port)) == -1)
-		log_quit("cannot connect to the redis server");
+		log_quit("connect to the redis server unsuccessfully");
 	log_msg("connect to the redis server successfully");
-
 	int len = slave_array.size();
 	// connect to all the slave slave servers.
 	for(int i=0; i < len; ++i)
@@ -131,7 +144,7 @@ int main(int argc, char *argv[])
 		int sockfd = client_connect(slave_array[i].c_str(), slave_port);
 		if(sockfd == -1)
 		{
-			log_msg("cannot connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
+			log_msg("connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
 			continue;
 		}
 		SSL * ssl_temp = ssl_client(ctx_client, sockfd); // establish ssl connection to the slave server.
@@ -144,31 +157,31 @@ int main(int argc, char *argv[])
 		//add the current connection to connected slave servers.
 		connected_slaves.insert(make_pair(slave_array[i], ssl_temp));
 
-		log_msg("connect to the slave server %s successfully", slave_array[i].c_str());
+		log_msg("connect to the slave server %s", slave_array[i].c_str());
 	}
 	if(connected_slaves.empty())
-		log_quit("no slave server available");
+	     log_quit("no slave server available");
 	current_iterator = connected_slaves.begin();
-
 	// listen to the clients' connection
 	int listenfd = server_listen(master_port);
 	if(listenfd == -1)
-		log_quit("cannot listen the %s port", master_port);
-	log_msg("listen to %s port successfully", master_port);
-
+		log_quit("listen the %s port unsuccessfully", master_port);
+	log_msg( "listen to %s port successfully", master_port);
 	// listen to status  port
 	int statusfd = server_listen(master_status_port);
 	if(statusfd == -1)
-		log_quit("cannot listen to %s status port", master_status_port);
-	log_msg("listen to %s status port successfully", master_status_port);
-
+	{
+		log_quit("listen to %s status port unsuccessfully", master_status_port);
+	}
+	log_msg("listen to %s status port", master_status_port);
+	
 	// create the message handler thread to handler new message.
 	pthread_t thread;
 	int k = pthread_create(&thread, NULL, msg_handler_thread, NULL);
 	if(k != 0)
-		log_msg("msg_handler_thread create unsuccessfully");
+	     log_quit("msg_handler_thread create unsuccessfully");
 	else 
-		log_msg("msg_handler_thread create successfully");
+		 log_msg("msg_handler_thread create successfully");
 
 	fd_set rset, allset;
 	int maxfd = listenfd;
@@ -201,7 +214,7 @@ int main(int argc, char *argv[])
             if(clientfd < 0)
 			{
 	 			log_ret("accept error");
-				continue; 
+	 			continue; 
 			}
 			if(inet_ntop(AF_INET,&client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
 				log_msg("client %s was connected", dst);
@@ -216,7 +229,7 @@ int main(int argc, char *argv[])
 	 			connected_clients.insert(make_pair(clientfd, ss));
 				FD_SET(clientfd, &allset); // add the new connection to the set.
 				if(clientfd > maxfd)
- 	 				maxfd = clientfd; 
+ 	  				maxfd = clientfd; 
 			}
 			else 
 				log_msg("ssl_server error");
@@ -241,7 +254,12 @@ int main(int argc, char *argv[])
 			if(FD_ISSET(iter->first, &rset))
 			{
 				char  message[MAXLINE+1];
-				int n = SSL_read(iter->second, message, MAXLINE);
+				int n;
+				while((n = SSL_read(iter->second, message, MAXLINE)) < 0)
+				{
+					if(n < 0 && errno == EINTR)
+						continue;
+				}
 				if(n < 0)
 					n = 0;
 				message[n] = '\0';
@@ -254,13 +272,13 @@ int main(int argc, char *argv[])
 					close(iter->first);
 					FD_CLR(iter->first, &allset);
 					unordered_map<int, SSL *>::iterator iter_temp = iter++;
- 	 				connected_clients.erase(iter_temp);
+ 	  				connected_clients.erase(iter_temp);
 				}
 				else
 					++iter;
 				// no ready clients anymore
 				if(--nready == 0)
- 	 				break; 
+ 	  				break;  
 			}
 			else
 				++iter;

@@ -141,8 +141,8 @@ char *client_info::show_filelist() const
 			iter!=file_storage.end();++iter)
 	{
 		char size[MAXLINE];
-		snprintf(size, MAXLINE,"%lldMB", iter->second.file_size);
-		result+=iter->first+" "+size+"\n";
+		snprintf(size, MAXLINE,"%-50s%10lld\n",iter->first.c_str(), iter->second.file_size);
+		result += size;
 	}
 	if(result.empty())
 		result = "(nil)\n";

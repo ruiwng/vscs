@@ -33,6 +33,11 @@ public:
 	//show the file list of the current user.
 	//remember to free the memory after its usage.
 	char *show_filelist() const;
+	// Judge whether a file exists or not.
+	bool is_file_exist(const char *name) const
+	{
+		return file_storage.find(name) != file_storage.end();
+	}
 	int query_file_storage(const char *name, char *storage) const;
 	const char *get_clientname() const {return client_name.c_str();}
 private:
