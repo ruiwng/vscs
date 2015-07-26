@@ -21,7 +21,7 @@ int ssl_readn(SSL *ssl, void *vptr, int n)
 		if((nread = SSL_read(ssl, ptr, nleft)) < 0)
 		{
 			if(errno == EINTR)
-				nread = 0; /* call SSL_readn() again */
+				nread = 0; /* call SSL_read() again */
 			else
 				return ERR;
 		}else if(nread == 0)
