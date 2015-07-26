@@ -160,11 +160,14 @@ void command_parse(SSL *ssl, char *command_line)
 			printf("not signed in.\n");
 		else
 		{
-			sscanf(message, "%d", &len);
+			sscanf(message, "%d\n", &len);
 			SSL_write(ssl, "OK", strlen("OK"));
 			char *p_list = (char *)malloc(len + 1);
-		    if(ssl_readn(ssl, p_list, len) != len)
+			int m;
+		    if((m = SSL_read(ssl, p_list, len)) < 0)
 			{
+				p_list[m] = '\0';
+				printf("value: %d %s\n", m,  p_list);
 				printf("SSL_readn error.\n");
 				return; 
 			}
@@ -182,18 +185,14 @@ void command_parse(SSL *ssl, char *command_line)
 		}
 		// add the file to be uploaded to the upload array.
 		struct stat64 buf;
+		memset(&buf, 0, sizeof(buf));
 		int file = open(arg,FILE_MODE);
+		fstat64(file, &buf);
 		if(file < 0)
 		{
 			printf("file %s not exist\n", arg);
 			return;
 		}
-		memset(&buf, 0, sizeof(buf));
-		fstat64(file, &buf);
-		pthread_mutex_lock(&upload_mutex);
-		upload_array.insert(make_pair(arg, record(buf.st_size)));
-		pthread_mutex_unlock(&upload_mutex);
-		close(file);
 		snprintf(message, MAXLINE, "upload %s %s %lld",ip_address, arg, (long long)buf.st_size);
 		int len = strlen(message);
 
@@ -209,6 +208,15 @@ void command_parse(SSL *ssl, char *command_line)
 			return;
 		}
 		message[k] = '\0';
+		char temp[MAXLINE];
+		snprintf(temp, MAXLINE, "file %s already exists.\n", arg);
+		if(strcmp(temp, message) != 0)
+		{
+			pthread_mutex_lock(&upload_mutex);
+			upload_array.insert(make_pair(arg, record(buf.st_size)));
+			pthread_mutex_unlock(&upload_mutex);
+		}
+		close(file);
 		printf("%s", message);
 	}
 	else if(strcmp(command, "download") == 0) // download a file from the slave server.

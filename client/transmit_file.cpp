@@ -86,9 +86,14 @@ void* status_thread(void *arg)
 	pthread_mutex_unlock(&upload_mutex);
 	sleep_us(500000);
 	bool empty = false;
-	int move_up;
+	int move_up = 0;
 	while(status_query)
 	{
+		for(int i = 0; i< move_up; ++i)
+		{
+			printf("\033[1A");
+			printf("\033[K");
+		}
 		move_up = 0;
 		string result;
 		char temp[MAXLINE];
@@ -126,11 +131,6 @@ void* status_thread(void *arg)
 		printf("%s", result.c_str());
 		fflush(stdout);
 		sleep_us(500000);
-        for(int i = 0;i < move_up; ++i)
-		{
-			printf("\033[1A");
-			printf("\033[K");
-		}
 	}
 	if(empty)
 	{
