@@ -285,7 +285,7 @@ void *upload_thread(void *command_line)
 		SSL_shutdown(ssl);
 		close(sock_fd);
 		SSL_free(ssl);
-		log_msg("upload_thread: file size not equal");
+		log_msg("upload_thread: file size not equal: upload_bytes %lld", upload_bytes);
 		return NULL;
 	}
 	//erase the upload job from the upload array.
