@@ -28,7 +28,7 @@ void get_progress(const char *operation, const char *file_name, long long prev, 
 	for(int i = 0; i < pos; ++i)
 		*p++ = '=';
 		*p++ = '>';
-	for(int i = pos; i < 50; ++i)
+	for(int i = pos; i < 49; ++i)
 		*p++ = ' ';
 	*p++ = ']';
 
