@@ -64,7 +64,7 @@ void query_status(int sockfd)
 		 empty = false;
 	 pthread_mutex_unlock(&upload_mutex);
 	 //if no download connection and upload connection, (nil) was transmitted.
-	 SSL_write(ssl, "    (nil)", strlen("    (nil)"));
+	 SSL_write(ssl, "    (nil)\n", strlen("    (nil)\n"));
 
 	 close(sockfd);
 	 SSL_free(ssl);
@@ -76,18 +76,18 @@ int main(int argc, char *argv[])
 	// slave status port ssl certificate, and ssl key.
 	if(slave_configure(slave_port, slave_status_port, client_transmit_port,
 				 ssl_certificate, ssl_key, store_dir) == -1)
-		log_quit("slave server configure failed");
-	log_msg("slave server configure successfully");
+		err_quit("%-60s[\033[;31mFAILED\033[0m]", "slave server configure");
+	printf("%-60s[\033[;32mOK\033[0m]\n", "slave server configure");
 
 	// initialize the SSL
 	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
-		log_quit("SSL server initialize failed");
+		err_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL server initialize");
 	ctx_client = ssl_client_init();
 	if(ctx_client == NULL)
-		log_quit("SSL client initialize failed");
+		log_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL client initialize");
 
-	log_msg("SSL initialize successfully");
+	log_msg("%-060s[\033[;32mOK\033[0m]\n", "SSL initialize");
 
 	//iniitialize the mutex.
 	pthread_mutex_init(&download_mutex, NULL);
