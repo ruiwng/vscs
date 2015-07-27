@@ -8,6 +8,6 @@
 #define   COMMAND_PARSE_H
 
 // parse the command from the client.
-void command_parse(SSL *ssl,const char*command_line);
+void command_parse(int sockfd, SSL *ssl,const char*command_line);
 
 #endif

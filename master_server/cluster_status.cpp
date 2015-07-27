@@ -7,7 +7,10 @@
 #include  "vscs.h"
 #include  "cluster_status.h"
 
-void cluster_status(const char *master_status_port)
+extern SSL_CTX *ctx_client;
+extern char master_status_port[MAXLINE];
+
+void cluster_status()
 {
 	int sockfd = client_connect("127.0.0.1", master_status_port);
 	if(sockfd == -1)
@@ -15,10 +18,11 @@ void cluster_status(const char *master_status_port)
 		printf("master server not start.\n");
 		return;
 	}
+	SSL *ssl = ssl_client(ctx_client, sockfd);
 	char message[MAXLINE + 1];
 	while(true)
 	{
-		int len = read(sockfd, message, MAXLINE);
+		int len = SSL_read(ssl , message, MAXLINE);
 		if(len < 0)
 		{
 			if(errno == EINTR)
@@ -29,6 +33,8 @@ void cluster_status(const char *master_status_port)
 		message[len] = '\0';
 		printf("%s", message);
 	}
+	SSL_shutdown(ssl);
 	close(sockfd);
+	SSL_free(ssl);
 	return;
 }

@@ -16,9 +16,10 @@ class msg_queue
 private:
 	struct msg
 	{
+		int sockfd;
 		SSL *ssl;
 		string message;
-		msg(SSL *s, char *m):ssl(s), message(m){}
+		msg(int fd, SSL *s, char *m):sockfd(fd),ssl(s), message(m){}
 	};
 	queue<msg> all_messages;
 
@@ -26,9 +27,9 @@ public:
 	msg_queue();
 	~msg_queue();
 	// get a message from the queue
-	void pop_msg(SSL *&s, char *message);
+	void pop_msg(int &sock, SSL *&s, char *message);
 	// push a message to the queue
-	void push_msg(SSL *s, char *message);
+	void push_msg(int sock, SSL *s, char *message);
 
 private:
 	sem_t queue_sem; // tell when the queue is not empty

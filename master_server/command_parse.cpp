@@ -7,18 +7,20 @@
 #include  "vscs.h"
 #include  "command_parse.h"
 #include  "client_info.h"
+#include  "connected_slaves.h"
 
 extern int sockdb; // the socket descriptor connected to the Redis database server.
 unordered_map<SSL *,client_info*> signin_users;// all signin users recorded here.
-extern unordered_map<string, SSL*> connected_slaves; // all the connected slave servers versus their SSL*.
-extern unordered_map<string, SSL*>::iterator current_iterator; // the very iterator points to the slave server that will be used 
+extern connected_slaves all_slaves; // all the connected slave servers versus their SSL*.
 
+char *p = NULL;
+int k = 0;
 // parse the command from the client.
-void command_parse(SSL *ssl,const char *command_line)
+void command_parse(int sockfd, SSL *ssl,const char *command_line)
 {
 	char command[MAXLINE], arg1[MAXLINE], arg2[MAXLINE];
 	long long arg3;
-	char message[MAXLINE];
+	char message[MAXLINE + 1];
 	int n = sscanf(command_line, "%s%s%s%lld", command, arg1, arg2, &arg3);
 
 	// whether or not the user has login.
@@ -77,6 +79,8 @@ void command_parse(SSL *ssl,const char *command_line)
 	 			delete iter->second;
 				signin_users.erase(iter);
 			}
+			SSL_shutdown(ssl);
+			close(sockfd);
 			SSL_free(ssl);
 		}
 	}
@@ -98,29 +102,24 @@ void command_parse(SSL *ssl,const char *command_line)
 		}
 		else
 		{
-			char *p = iter->second->show_filelist();
-			int k = strlen(p);
+			p = iter->second->show_filelist();
+			k = strlen(p);
 			snprintf(message, MAXLINE, "%d\n", k);
 			int len = strlen(message);
 			if(ssl_writen(ssl, message, len) != len)
-				log_msg("command_parse: SSL_write error");
-			else
 			{
-				len = SSL_read(ssl, message, MAXLINE);
-				if(len < 0)
-					log_msg("command_parse: SSL_read error");
-				else
-				{
-					message[len] = '\0';
-					if(strcmp(message, "OK") == 0)
-					{
-						if(ssl_writen(ssl, p, k) != k)
-				 	 		log_msg("command_parse: SSL_writen error");
-                    }
-				}  
+				log_msg("command_parse: SSL_write error");
+				free(p); 
 			}
-			free(p);
 		}
+	}
+	else if(strcmp(command, "OK") == 0)
+	{
+		if(ssl_writen(ssl, p, k) != k)
+			log_msg("command_parse: ssl_writen error");
+		free(p);
+		p = NULL;
+		k = 0;
 	}
 	else if(strcmp(command, "upload") == 0) // upload a file to the slave user.
 	{
@@ -133,22 +132,20 @@ void command_parse(SSL *ssl,const char *command_line)
 			snprintf(message, MAXLINE, "file %s already exists.\n", arg2);
 		else
 		{
-			SSL *store = current_iterator->second;
+			connection store = all_slaves.get_a_connection();
 			char temp[MAXLINE];
 			snprintf(temp, MAXLINE, "upload %s %s %s", arg1, arg2, iter->second->get_clientname());
 			int x = strlen(temp);
-			if(ssl_writen(store, temp, x) != x) // ssl_writen error
+			if(ssl_writen(store.ssl, temp, x) != x) // ssl_writen error
 			{
-				log_msg("command_parse: ssl_writen error");
-				snprintf(message, MAXLINE, "%s upload error\n", arg2);
+				log_msg("command_parse: ssl_writen error"); 
+				snprintf( message, MAXLINE, "%s upload error\n", arg2);
 			}
 			else
 			{
-			    iter->second->add_file(arg2, arg3, current_iterator->first.c_str());
+			    iter->second->add_file(arg2, arg3, store.address.c_str());
 				snprintf(message, MAXLINE, "%s start to upload\n", arg2);
 			}
-			if(++current_iterator == connected_slaves.end())
-				current_iterator = connected_slaves.begin();
 		}
 			int len = strlen(message);
 			if(ssl_writen(ssl, message, len) != len)
@@ -169,22 +166,22 @@ void command_parse(SSL *ssl,const char *command_line)
 				strcpy(message, "file not exist\n");
 			else
 			{
-				unordered_map<string, SSL*>::iterator iter_temp = connected_slaves.find(storage);
-				if(iter_temp == connected_slaves.end())
+				SSL *ssl_temp = all_slaves.is_exist(storage);
+				if(ssl_temp == NULL)
 					strcpy(message, "storage server not connected\n");
 				else
 				{
 					char temp[MAXLINE];
 					snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
 					int x = strlen(temp);
-					if(ssl_writen(iter_temp->second, temp, x) != x)
+					if(ssl_writen(ssl_temp, temp, x) != x)
 					{
 						log_msg("command_parse: ssl_writen error");
-				 		snprintf(message, MAXLINE, "%s download error\n", arg2);
+				 	 	snprintf(message, MAXLINE, "%s download error\n", arg2);
 					}
 					else
-				 	 	snprintf(message, MAXLINE, "%s start to download\n", arg2);
-				}  
+				 	  	snprintf(message, MAXLINE, "%s start to download\n", arg2);
+				}   
 			}
 		}
 		int len = strlen(message);
@@ -206,15 +203,15 @@ void command_parse(SSL *ssl,const char *command_line)
 				strcpy(message, "file not exist\n");
 			else
 			{
-				unordered_map<string,  SSL*>::iterator iter_temp = connected_slaves.find(storage);
-				if(iter_temp == connected_slaves.end()) // the very slave server is not connected.
+				SSL * ssl_temp = all_slaves.is_exist(storage);
+				if( ssl_temp == NULL) // the very slave server is not connected.
 					strcpy(message, "storage server not connected\n");
 				else
 				{
 					char temp[MAXLINE];
 					snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
 					int x = strlen(temp);
-					if(ssl_writen(iter_temp->second, temp, x) != x) // send the slave server the message to delete a file.
+					if(ssl_writen(ssl_temp, temp, x) != x) // send the slave server the message to delete a file.
 					{
 						log_msg("command_parse: ssl_writen error");
 				 	  	snprintf(message, MAXLINE, "%s delete error\n", arg1);

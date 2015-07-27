@@ -4,7 +4,7 @@ PROGS = vscs_master
 
 all : $(PROGS)
 
-vscs_master : master_server.o client_info.o master_config.o command_parse.o msg_queue.o cluster_status.o
+vscs_master : master_server.o client_info.o master_config.o command_parse.o msg_queue.o cluster_status.o connected_slaves.o
 	$(CC) -o $@ $^ $(LIBS)
 
 clean :

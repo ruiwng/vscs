@@ -7,6 +7,6 @@
 #ifndef   CLUSTER_STATUS_H
 #define   CLUSTER_STATUS_H
 
-void cluster_status(const char *master_status_port);
+void cluster_status();
 
 #endif
