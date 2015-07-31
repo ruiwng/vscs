@@ -119,7 +119,7 @@ int slave_configure(char *slave_port, char *slave_status_port, char *backup_port
 	}
 
 	if(*slave_port == '\0' || *slave_status_port == '\0' || *client_transmit_port == '\0' || *backup_port == '\0' || 
-			 *ssl_certificate == '\0' ||
+			 *slave_listen_port == '\0' || *ssl_certificate == '\0' ||
 			*ssl_key == '\0' || *store_dir == '\0')
 	{
 		log_msg("unconfigured argument exists");
