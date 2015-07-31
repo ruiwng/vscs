@@ -10,6 +10,8 @@
 extern SSL_CTX *ctx_client;
 extern char client_transmit_port[MAXLINE];
 extern char store_dir[MAXLINE];
+extern char backup_port[MAXLINE];
+
 // to realize the exclusive access to the download arary.
 extern pthread_mutex_t download_mutex;
 extern unordered_set<string> download_array;
@@ -157,16 +159,27 @@ void *upload_thread(void *command_line)
 {
 	 log_msg("upload_thread: %s start", command_line);
 	char ip_addr[MAXLINE], file_name[MAXLINE], user_name[MAXLINE];
+	char backup_addr[MAXLINE];
 	//get the ip address user name, and file name of the client.
-	if(sscanf((char*)command_line, "%s%s%s", ip_addr, file_name, user_name) != 3)
+	int n = sscanf((char *)command_line, "%s%s%s%s", ip_addr, file_name, user_name, backup_addr);
+	if(n < 3)
 	{
 		free(command_line);
 		log_msg("upload_thread: parse command unsuccessfully");
 		return NULL;
 	}
+	else if(n == 3)
+	{
+		*backup_addr = '\0';
+		log_msg("upload_thread: no backup address");
+	}
+	else 
+		log_msg("upload_thread: backup address %s", backup_addr);
+
 	free(command_line);
 	log_msg("upload_thread: %s", store_dir);
 	char file[MAXBUF];
+
 	// establish the directory to store files of the client.
 	snprintf(file, MAXBUF, "%s/%s/", store_dir, user_name);
 	log_msg("upload_thread: file directory %s", file);
@@ -179,15 +192,17 @@ void *upload_thread(void *command_line)
 		}
 	}
 	strcat(file, file_name);
-	log_msg("upload_thread: file name %s", file);
+	log_msg("upload_thread: file name %s", file); 
+
 	// open the uploaded file to write.
 	FILE *p_file;
 	if((p_file = fopen(file, "w")) == NULL)
 	{
 		log_msg("upload_thread: open %s for write unsuccessfully", file);
 		return NULL;
-	}
-	//initialize the connection
+	} 
+
+	//initialize the connection to the client.
 	int sock_fd = client_connect(ip_addr, client_transmit_port);
 	
 	//fail in establishing a connection to the client.
@@ -251,6 +266,51 @@ void *upload_thread(void *command_line)
 	long long upload_bytes;
 	sscanf(str_buf, "%lld",&upload_bytes);
 	SSL_write(ssl, "OK", strlen("OK"));
+
+	/*
+	 * connect to the backup slave server.
+	 */
+	int backup_fd = -1;
+	if(*backup_addr !='\0')
+	    backup_fd = client_connect(backup_addr, backup_port);
+	if(backup_fd >= 0)
+	{
+		char backup_msg[MAXLINE + 1];
+		snprintf(backup_msg, MAXLINE, "%s %s %lld", file_name, user_name, upload_bytes);
+		int len = strlen(backup_msg);
+		int written = writen(backup_fd, backup_msg, len);
+		if(written != len)
+		{
+			backup_fd = -1;
+			log_ret("upload_thread: writen to backup server error");
+		}
+		else
+		{
+			len = read(backup_fd, backup_msg, MAXLINE);
+			if(len < 0)
+			{
+				backup_fd = -1;
+				log_ret("upload_thread: read from backup server error");
+			}
+			else
+			{
+				backup_msg[len] = '\0';
+				if(strcmp(backup_msg, "OK") != 0)
+				{
+					backup_fd = -1;
+					log_msg("upload_thread: backup strcmp error");
+				}
+			}
+		}
+	}
+	else
+	{
+		backup_fd = -1;
+		log_msg("upload_thread: cannot connect to the backup server %s", backup_addr);
+	}
+	if(backup_fd != -1)
+		log_msg("upload_thread: connect to the backup server %s successfully", backup_addr);
+
 	// add the upload job to the upload array.
 	pthread_mutex_lock(&upload_mutex);
 	upload_array.insert((const char *)command_line);
@@ -264,7 +324,7 @@ void *upload_thread(void *command_line)
 				continue;
 			else
 			{
-			 	log_ret(" upload_thread: SSL_read error");
+	 		 	log_ret(" upload_thread: SSL_read error");
 				unlink(file);
 				fclose(p_file);
 				SSL_shutdown(ssl);
@@ -276,6 +336,14 @@ void *upload_thread(void *command_line)
 		if(nread == 0) // connection to the client was broken.
 			break;
 		fwrite(str_buf, sizeof(char), nread, p_file);
+
+		// if backup server is connected, write to it.
+		if(backup_fd != -1)
+		{
+			int n = writen(backup_fd, str_buf, nread);
+			if(n != nread)
+				log_msg("upload_thread: write to the backup server error");
+		}
 		upload_bytes -= nread;
 	}
 	if(upload_bytes != 0)

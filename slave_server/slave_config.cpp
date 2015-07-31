@@ -7,12 +7,14 @@
 #include  "vscs.h"
 #include  "slave_config.h"
 
-int slave_configure(char *slave_port, char *slave_status_port, char *client_transmit_port,
-		char *ssl_certificate, char *ssl_key, char *store_dir)
+int slave_configure(char *slave_port, char *slave_status_port, char *backup_port, char *client_transmit_port,
+		char *slave_listen_port, char *ssl_certificate, char *ssl_key, char *store_dir)
 {
 	*slave_port = '\0';
 	*slave_status_port = '\0';
+	*backup_port = '\0';
 	*client_transmit_port = '\0';
+	*slave_listen_port = '\0';
 	*ssl_certificate = '\0';
 	*ssl_key = '\0';
 	*store_dir = '\0';
@@ -50,19 +52,37 @@ int slave_configure(char *slave_port, char *slave_status_port, char *client_tran
 		{
 			if(*slave_status_port != '\0')
 			{
-				log_msg("sl ave_configure: SLAVE_STATUS_PORT duplicate configured");
+				log_msg("slave_configure: SLAVE_STATUS_PORT duplicate configured");
 				return -1;
 			}
 			strcpy(slave_status_port, conf);
+		}
+		else if(strcmp(name, "BACKUP_PORT") == 0) // used for backup
+		{
+			if(*backup_port != '\0')
+			{
+				log_msg("slave_configure: BACKUP_PORT duplicate configured");
+				return -1;
+			}
+			strcpy(backup_port, conf);
 		}
 		else if(strcmp(name, "CLIENT_TRANSMIT_PORT") == 0)//client transmit port
 		{
 			if(*client_transmit_port != '\0')
 			{
-				log_msg("sl ave_c onfigure: SLAVE_DOWNLOAD_PORT duplicate configured");
-				return  - 1;
+				log_msg("slave_configure: SLAVE_DOWNLOAD_PORT duplicate configured");
+				 return  - 1;
 			}
 			strcpy(client_transmit_port, conf);
+		}
+		else if(strcmp(name, "SLAVE_LISTEN_PORT") == 0) // wait for a connection to be a slave server.
+		{
+			if(*slave_listen_port != '\0')
+			{
+				log_msg("slave_configure: SLAVE_LISTEN_PORT duplicate configured");
+				return -1;
+			}
+			strcpy(slave_listen_port, conf);
 		}
 		else if(strcmp(name, "SSL_CERTIFICATE") == 0) //certificate file of SSL
 		{
@@ -98,7 +118,7 @@ int slave_configure(char *slave_port, char *slave_status_port, char *client_tran
 		}
 	}
 
-	if(*slave_port == '\0' || *slave_status_port == '\0' || *client_transmit_port == '\0' || 
+	if(*slave_port == '\0' || *slave_status_port == '\0' || *client_transmit_port == '\0' || *backup_port == '\0' || 
 			 *ssl_certificate == '\0' ||
 			*ssl_key == '\0' || *store_dir == '\0')
 	{

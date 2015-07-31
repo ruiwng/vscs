@@ -18,7 +18,10 @@ void *master_connect_thread(void *arg)
 	struct sockaddr_in master_addr;
 	socklen_t len = sizeof(master_addr);
 	memset(&master_addr, 0, len);
-	int sock_fd = (int)arg;
+	
+	//get the socket descriptor and free the allcoated memory.
+	int sock_fd = *((int*)arg);
+	free(arg);
 
 	char addr[MAXLINE];
 	if(getpeername(sock_fd, (sockaddr*)&master_addr, &len) < 0)
