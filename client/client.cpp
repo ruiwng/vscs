@@ -19,6 +19,9 @@ SSL_CTX *ctx_client;
 
 bool stop = false; // whether to stop the execution or not.
 char ip_address[MAXLINE]; // the ip address of the client.
+char server_address[MAXLINE]; // the ip address of the server.
+
+char cmd_line[MAXLINE]; 
 
 // exculsive access to the download array.
 pthread_mutex_t download_mutex; 
@@ -134,33 +137,38 @@ int main(int argc, char *argv[])
 		printf("usage : %s <ipaddress>\n", argv[0]);
 		return -1;
 	}
-
+	strcpy(server_address, argv[1]);
+	sleep_us(500000);
 	// configure the client.
 	if(client_configure(master_port, transmit_port, ssl_certificate, ssl_key) < 0)
 	{
-		printf("client configured failed\n");
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "client configured");
 		return -1;
 	}
-	
+	printf("%-60s[\033[;32mOK\033[0m]\n", "client configured");
+	sleep_us(500000);
 	// initialize the SSL
 	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
 	{
-		printf("SSL server initialize unsuccessfully\n");
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "SSL server initialize");
 		return -1;
 	}
 	ctx_client = ssl_client_init();
 	if(ctx_client == NULL)
 	{
-		printf("SSL client initialize unsuccessfully\n");
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "SSL client initialize");
+		return -1;
 	}
-	printf("SSL initialize successfully\n");
-
+	printf("%-60s[\033[;32mOK\033[0m]\n", "SSL initialize");
+	sleep_us(500000);
 	// connect to the master server.
+	char temp[MAXLINE];
+	snprintf(temp, MAXLINE, "connect to master server: %s", argv[1]);
 	int masterfd = client_connect(argv[1], master_port);
 	if(masterfd == -1)
 	{
-		printf("cannot connect to master server: %s\n", argv[1]);
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", temp);
 		return -1;
 	}
 	sockaddr_in clientaddr;
@@ -169,12 +177,12 @@ int main(int argc, char *argv[])
 	getsockname(masterfd, (sockaddr*)&clientaddr, &len);
 	inet_ntop(AF_INET, (void *)&clientaddr.sin_addr, ip_address, MAXLINE);
 
-	printf("connected to the master server: %s\n", argv[1]);
-	
+	printf("%-60s[\033[;32mOK\033[0m]\n", temp);
+	sleep_us(500000);
 	SSL *ssl = ssl_client(ctx_client, masterfd);
 	if(ssl == NULL)
 	{
-		printf("ssl_client error\n");
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "ssl_client\n");
 		return -1;
 	}
 	int k = SSL_write(ssl, "Hello world!", strlen("Hello world!"));
@@ -183,29 +191,33 @@ int main(int argc, char *argv[])
 		printf("SSL_write error\n");
 		return -1;
 	}
-	printf("ssl_client successfully\n");
+	printf("%-60s[\033[;32mOK\033[0m]\n", "ssl_client");
+	sleep_us(500000);
+	snprintf(temp, MAXLINE, "listen to transmit port: %s", transmit_port);
 	int listenfd = server_listen(transmit_port);
 	if(listenfd == -1)
 	{
-		printf("listen to transmit_port:%s unsuccessfully\n", transmit_port);
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", temp);
 		return -1;
 	}
-	printf("listen to transmit_port: %s successfully\n", transmit_port);
+	printf("%-60s[\033[;32mOK\033[0m]\n", temp);
+	sleep_us(500000);
 	pthread_t thread;
 	int ret = pthread_create(&thread, NULL, transmit_thread, (void*)listenfd);
 	if(ret == 0)
-	     printf("create transmit_thread successfully\n");
+	     printf("%-60s[\033[;32mOK\033[0m]\n", "transmit_thread create");
 	else
 	{
-		printf("create transmit_thread unsuccessfully\n");
+		printf("%-60s[\033[;31FAILED\033[0m]\n", "transmit_thread create");
 		return -1;
 	}
 	pthread_mutex_init(&download_mutex, NULL);
 	pthread_mutex_init(&upload_mutex, NULL);
 	char command_line[MAXLINE];
+	snprintf(cmd_line, MAXLINE,"%s:%s> ", argv[1], master_port);
 	while(!stop)
 	{
-		printf("%s:%s> ", argv[1], master_port);
+		printf(cmd_line);
 		fflush(stdin);
 		//read the command inputed by the user.
 		fgets(command_line, MAXLINE, stdin);
