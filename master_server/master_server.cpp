@@ -24,6 +24,7 @@ char master_port[MAXLINE];// port listening to the clients.
 
 char slave_status_port[MAXLINE];// status port of the slave server.
 char master_status_port[MAXLINE]; // status port of the master server.
+char slave_listen_port[MAXLINE]; // wait for a connection to be a slave server.
 
 char ssl_certificate[MAXLINE]; // certificate file of ssl
 char ssl_key[MAXLINE]; // private key of ssl
@@ -35,12 +36,9 @@ SSL_CTX *ctx_server;  // run as a server.
 SSL_CTX *ctx_client;  // run as a client.
 
 /*
- * connection-related stuff.
+ * client-connection-related stuff.
  */
-pthread_mutex_t slave_mutex;
-pthread_mutex_t clients_mutex;
-unordered_map<int, SSL*> connected_clients; // all the clients connected to the server.
-unordered_map<string, SSL*>::iterator current_iterator; // the very iterator points the the slave server that will be used.
+unordered_map<int, SSL*> connected_clients;
 
 msg_queue all_msgs;
 connected_slaves all_slaves;
@@ -169,17 +167,21 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	sleep_us(500000);
+
 	//read the configure file to get redis adress, redis port, slave server array,
 	//port of the slave server, port of the master server, status port of slave server
 	//status port of master server, certificate of ssl and private key of ssl.
 	if(master_configure(redis_address, redis_port, slave_array, slave_port,
-				master_port,  slave_status_port, master_status_port, ssl_certificate,
+ 				master_port,  slave_status_port, master_status_port, slave_listen_port, ssl_certificate,
  				ssl_key ) == -1) 
 		err_quit("%-60s[\033[;31mFAILED\033[0m]", "master server configure");
 
 	printf("%-60s[\033[;32mOK\033[0m]\n", "master server configure");
 	sleep_us(500000);
-	// initialize the SSL
+
+	/* 
+	 * initialize the SSL
+	 */
 	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
 		err_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL server initialize");
@@ -195,7 +197,9 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	// daemonize the master server.
+	/*
+	 * daemonize the master server.
+	 */
 	daemonize("vscs_master");
 
 	struct sigaction sa;
@@ -212,18 +216,23 @@ int main(int argc, char *argv[])
 	if((err = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0)
 		log_sys("pthread_sigmask failed");
 
-	//connect to the redis server.
+	/*
+	 * connect to the redis database server.
+	 */
 	if((sockdb = client_connect(redis_address, redis_port)) == -1)
 		log_quit("connect to the redis server unsuccessfully");
 	log_msg("connect to the redis server successfully");
+
+	/*
+	 * connect to all the slave slave servers.
+	 */
 	int len = slave_array.size();
-	// connect to all the slave slave servers.
 	for(int i=0; i < len; ++i)
 	{
 		int sockfd = client_connect(slave_array[i].c_str(), slave_port);
 		if(sockfd == -1)
 		{
-			log_msg("connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
+			log_msg("cannot connect to slave server %s:%s", slave_array[i].c_str(), slave_port);
 			continue;
 		}
 		SSL * ssl_temp = ssl_client(ctx_client, sockfd); // establish ssl connection to the slave server.
@@ -242,19 +251,33 @@ int main(int argc, char *argv[])
 	     log_quit("no slave server available");
 	all_slaves.init();
 
-	// listen to the clients' connection
+	/*
+	 * listen to the clients' connection
+	 */
 	int listenfd = server_listen(master_port);
 	if(listenfd == -1)
 		log_quit("listen to the %s port unsuccessfully", master_port);
 	log_msg( "listen to %s port successfully", master_port);
 
-	// listen to status  port
+	/*
+	 * listen to status  port
+	 */
 	int statusfd = server_listen(master_status_port);
 	if(statusfd == -1)
 		log_quit("listen to %s status port unsuccessfully", master_status_port);
 	log_msg("listen to %s status port", master_status_port);
-	
-	// create the message handler thread to handler new message.
+
+	/*
+	 * listen to a new connection to be a slave server.
+	 */
+	int slave_listenfd = server_listen(slave_listen_port);
+	if(slave_listenfd == -1)
+		log_quit("listen to %s slave listen port unsuccessfully", slave_listen_port);
+	log_msg("listen to %s slave listen port successfully", slave_listen_port);
+
+	/*
+	 * create the message handler thread to handler new message.
+	 */
 	pthread_t thread;
 	int k = pthread_create(&thread, NULL, msg_handler_thread, NULL);
 	if(k != 0)
@@ -262,21 +285,29 @@ int main(int argc, char *argv[])
 	else 
 		 log_msg("msg_handler_thread create successfully");
 
-	// create the signal handler thread.
+	/*
+	 * create the signal handler thread.
+	 */
     err = pthread_create(&thread, NULL, signal_thread, NULL);
 	if(err != 0)
 		log_quit("signal_thread create unsuccessfully");
 	else
 		log_msg("signal_thread create successfully");
 
-	// wait for the connection of listenfd and statusfd.
+	/*
+	 * wait for the connection of listenfd and statusfd.
+	 */
 	fd_set rset, allset;
 	int maxfd = listenfd;
 	if(maxfd < statusfd)//get the maximum file descriptor
 		maxfd = statusfd;
+	if(maxfd < slave_listenfd)
+		maxfd = slave_listenfd;
+
 	FD_ZERO(&allset); // initialize fd_set
 	FD_SET(listenfd, &allset);
 	FD_SET(statusfd, &allset);
+	FD_SET(slave_listenfd, &allset);
 
 	while(!stop)
 	{
@@ -332,6 +363,30 @@ int main(int argc, char *argv[])
 		}
 		if(nready == 0)
 			continue;
+		
+		if(FD_ISSET(slave_listenfd, &rset)) // a new connection to be a slave server.
+		{
+			// accept the request from a connection as a slave.
+			sockaddr_in slave_addr;
+			socklen_t len = sizeof(slave_addr);
+			memset(&slave_addr, 0, sizeof(slave_addr));
+			int slavefd = accept(slave_listenfd, (sockaddr*)&slave_addr, &len);
+
+			// get the ip address of the peer connection.
+			char ip_address[MAXLINE];
+			inet_ntop(AF_INET, (void *)&slave_addr.sin_addr, ip_address, MAXLINE);
+
+			SSL *ssl_temp = ssl_server(ctx_server, slavefd);
+			if(ssl_temp == NULL)
+			{
+				log_msg("a new slave server established unsuccessfully");
+			}
+			else
+			{
+				// add a new slave server to the slave connections.
+				all_slaves.add_a_connection(ip_address, slavefd, ssl_temp);
+			}
+		}
 
 		// traverse all the connected clients to see whether they are ready.	
 		for(unordered_map<int, SSL *>::iterator iter = connected_clients.begin();
@@ -352,7 +407,7 @@ int main(int argc, char *argv[])
 				log_msg("%s", message);
 				all_msgs.push_msg(iter->first, iter->second, message);// push the message to the message queue.
 				// the connection was terminted. so close the file descriptor.
-				if(n == 0 || strcmp(message, "signout") == 0)
+				if(n == 0 || strcmp(message, "exit") == 0)
 				{
 					FD_CLR(iter->first, &allset);
 					unordered_map<int, SSL *>::iterator iter_temp = iter++;
@@ -370,6 +425,8 @@ int main(int argc, char *argv[])
 	}
 	close(listenfd);
 	close(statusfd);
+	close(slave_listenfd);
+
 	SSL_CTX_free(ctx_server);
 	SSL_CTX_free(ctx_client);
 	exit(0);

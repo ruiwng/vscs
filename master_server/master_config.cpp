@@ -9,23 +9,29 @@
 
 int master_configure(char *redis_address, char *redis_port,
 		vector<string> &slave_array, char *slave_port, char *master_port, 
-		char *slave_status_port, char *master_status_port, char *ssl_certificate,
+		char *slave_status_port, char *master_status_port, char *slave_listen_port, char *ssl_certificate,
 		char *ssl_key)
 {
+	// initalize all the stuff.
 	*redis_address = '\0';
 	*redis_port = '\0';
 	*slave_port = '\0';
 	*master_port = '\0';
 	*slave_status_port = '\0';
 	*master_status_port = '\0';
+	*slave_listen_port = '\0';
 	*ssl_certificate = '\0';
 	*ssl_key = '\0';
+	
+	// open  the master configuration file.
 	FILE *f_config = fopen(master_config_file, "r");
 	if(f_config == NULL)
 	{
 		log_msg("master_configure: %s not exists", master_config_file);
 		return -1;
 	}
+
+	// begin reading the maste configuration file.
 	char str[MAXLINE];
 	while(fgets(str, MAXLINE, f_config) != NULL)
 	{
@@ -95,6 +101,15 @@ int master_configure(char *redis_address, char *redis_port,
 			   return -1;
 			}
 			strcpy(master_status_port, conf);
+		}
+		else if(strcmp(name, "SLAVE_LISTEN_PORT") == 0) // configuration of the waiting for the connection to be a slave.
+		{
+			if(*slave_listen_port != '\0')
+			{
+				log_msg("master_configure: SLAVE_LISTEN_PORT duplicate configured");
+				return -1;
+			}
+			strcpy(slave_listen_port, conf);
 		}
 		else if(strcmp(name, "SSL_CERTIFICATE") == 0) //certificate file of SSL
 		{

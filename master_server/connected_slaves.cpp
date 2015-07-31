@@ -23,6 +23,9 @@ connected_slaves::~connected_slaves()
 
 	// unlock the slaves.
 	pthread_mutex_unlock(&slave_mutex);
+	
+	// destroy the mutex.
+	pthread_mutex_destroy(&slave_mutex);
 }
 
 // add a new connection to the slaves.
@@ -101,6 +104,10 @@ connection connected_slaves::get_a_connection()
 	result.address = current_pos->first;
 	if(++ current_pos == slaves.end())
 		current_pos = slaves.begin();
+	if(slaves.size() != 1)
+		result.next_address = current_pos->first;
+	else
+		result.next_address = "";
 
 	// unlock the slaves.
 	pthread_mutex_unlock(&slave_mutex);

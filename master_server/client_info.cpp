@@ -41,8 +41,8 @@ int client_info::delete_file(const char *file_name)
 //get the file list of the current user.
 void client_info::get_filelist()
 {
-	char query[MAXLINE];
-	char reply[MAXLINE];
+	char query[MAXLINE + 1];
+	char reply[MAXLINE + 1];
 	snprintf(query, MAXLINE, "get %s%s\n", USER_PREFIX,client_name.c_str());
 	int len = strlen(query);
 	int k;

@@ -16,9 +16,10 @@
 
 struct connection
 {
-	int sockfd;
-	string address;
-	SSL *ssl;
+	int sockfd; // the connected sockfd.
+	string address; // the ip address corresponding to the connected socket.
+	SSL *ssl;// the ssl correspodning to the connected socket.
+	string next_address;// the backup ip address.
 };
 
 class connected_slaves
@@ -44,7 +45,7 @@ public:
 	void add_a_connection(const char *ip_address, const int sockfd, SSL *ssl);
 	// fetch all the ip address of connections.
 	vector<string> get_all_connections();
-	// judge whether there is at least on connection or not.
+	// judge whether there is at least one connection or not.
 	bool is_empty();
 	// judge whether ip address exists in the slaves.
 	SSL *is_exist(const char *ip_address);
