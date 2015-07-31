@@ -2,6 +2,8 @@
 SLAVE_PORT 8989
 SLAVE_STATUS_PORT 8990 
 CLIENT_TRANSMIT_PORT 8993
+SLAVE_LISTEN_PORT 8994
+BACKUP_PORT 8995
 SSL_CERTIFICATE /home/ruiwng/openssl_test/cacert.pem
 SSL_KEY /home/ruiwng/openssl_test/privatekey.pem
 STORE_DIR /tmp/vscs_store
