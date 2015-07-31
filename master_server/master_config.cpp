@@ -136,7 +136,9 @@ int master_configure(char *redis_address, char *redis_port,
 		}
 	}
 	if(*redis_address == '\0' || *redis_port == '\0' || slave_array.empty() || *slave_port == '\0'
-			|| *master_port == '\0' || *slave_status_port == '\0' || *master_status_port == '\0')
+			|| *master_port == '\0' || *slave_status_port == '\0' || *master_status_port == '\0'
+			|| *slave_listen_port == '\0' || *ssl_certificate == '\0' 
+			|| *ssl_key == '\0')
 	{
 		log_msg("master_configure: unconfigured argument exist");
 		return -1;
