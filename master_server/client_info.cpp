@@ -19,12 +19,12 @@ client_info::~client_info()
 }
 
 //add a file correpsonding to the current user.
-int client_info::add_file(const char *name, long long file_size,const char *storage)
+int client_info::add_file(const char *name, long long file_size,const char *storage1, const char *storage2)
 {
 	unordered_map<string,info>::iterator iter = file_storage.find(name);
 	if(iter != file_storage.end())
 		return FILE_ALREADY_EXIST;
-	file_storage.insert(make_pair(name, info(storage, file_size)));
+	file_storage.insert(make_pair(name, info(file_size, storage1, storage2)));
 	return OK;
 }
 
@@ -75,13 +75,15 @@ void client_info::get_filelist()
 	}
 	p_mem[str_length] = '\0';
 
-	char file_name[MAXLINE], storage[MAXLINE];
+	char file_name[MAXLINE], storage1[MAXLINE], storage2[MAXLINE];
 	long long file_size;
-	while(sscanf(p_mem, "%s %s %lld", file_name, storage, &file_size) == 3)
+	while((n = sscanf(p_mem, "%s %lld %s %s", file_name, &file_size, storage1, storage2)) >= 3)
 	{
-		file_storage.insert(make_pair(file_name,info(storage,file_size)));
+		if(n == 3)
+			storage2[0] = '\0';
+		file_storage.insert(make_pair(file_name,info(file_size, storage1, storage2)));
 		p_mem = strchr(p_mem,'\n');
-		if(p_mem==NULL)
+		if(p_mem == NULL)
 			break;
 		++p_mem;
 	}
@@ -102,7 +104,7 @@ int client_info::restore_filelist() const
 			iter != file_storage.end(); ++iter)
 	{
 		snprintf(temp, MAXLINE, "%lld", iter->second.file_size);
-		result+=iter->first+" "+iter->second.storage+" "+temp+"\\n";
+		result+=iter->first + " " + temp + " " + iter->second.storage1 + " " + iter->second.storage2+"\\n";
 	}
 	string query = string("set ")+USER_PREFIX+client_name+" \""+result+"\"\n";
 	char reply[MAXLINE];
@@ -123,12 +125,13 @@ int client_info::restore_filelist() const
 }
 
 // get the storage of the current file.
-int client_info::query_file_storage(const char *file_name, char *storage) const
+int client_info::query_file_storage(const char *file_name, char *storage1, char *storage2) const
 {
 	unordered_map<string,info>::const_iterator iter = file_storage.find(file_name);
 	if(iter == file_storage.end())
 		return FILE_NOT_EXIST;
-	strcpy(storage, iter->second.storage.c_str());
+	strcpy(storage1, iter->second.storage1.c_str());
+	strcpy(storage2, iter->second.storage2.c_str());
 	return OK;
 }
 

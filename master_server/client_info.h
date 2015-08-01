@@ -9,17 +9,19 @@
 #include  <unordered_map>
 #include  <string>
 using namespace std;
-// the file information is represented as "file_name storage file_size"
-// e.g. abgbebt 10.66.27.242 10535
+
+// the file information is represented as "file_name file_size storage1 storage2"
+// e.g. abgbebt 10535 10.66.27.242 10.66.27.245
 class client_info
 {
 private:
 	
 struct info
 {
-	string storage;
 	long long file_size;
-	info(const string& stor, long long size):storage(stor),file_size(size){}
+	string storage1;
+	string storage2;
+	info(long long size, const string& stor1, const string& stor2):file_size(size), storage1(stor1), storage2(stor2){}
 };
 public:
 	client_info(int sockdb,const char *name);
@@ -27,7 +29,7 @@ public:
 
 public:
 	//add a file correspending to the current user.
-	int add_file(const char *file_name, long long file_size, const char *storage);
+	int add_file(const char *file_name, long long file_size, const char *storage1, const char *storage2);
 	//delete a file corresponding to the current user.
 	int delete_file(const char *file_name);
 	//show the file list of the current user.
@@ -38,8 +40,9 @@ public:
 	{
 		return file_storage.find(name) != file_storage.end();
 	}
-	int query_file_storage(const char *name, char *storage) const;
+	int query_file_storage(const char *name, char *storage1, char *storage2) const;
 	const char *get_clientname() const {return client_name.c_str();}
+
 private:
     void get_filelist();
 	int restore_filelist() const;
@@ -64,4 +67,5 @@ int user_exist(int sockdb, const char *name);
 // the return value USER_NOT_EXIST indicates the user doesn't exist.
 // the return value WRONG_PASSWD indicates the password is wrong.
 int user_login(int sockdb, const char *name, const char *passwd);
+
 #endif // CLIENT_INFO_H

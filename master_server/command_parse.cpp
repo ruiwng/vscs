@@ -163,7 +163,7 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			}
 			else
 			{
-			    iter->second->add_file(arg2, arg3, store.address.c_str());
+			    iter->second->add_file(arg2, arg3, store.address.c_str(), store.next_address.c_str());
 				snprintf(message, MAXLINE, "%s start to upload.\n", arg2);
 			}
 		}
@@ -180,28 +180,38 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			strcpy(message, "not signed in.\n");
 		else
 		{
-			char storage[MAXLINE];
-			int k = iter->second->query_file_storage(arg2, storage);
+			char storage[2][MAXLINE];
+			int k = iter->second->query_file_storage(arg2, storage[0], storage[1]);
 			if(k == FILE_NOT_EXIST)
 				strcpy(message, "file not exist.\n");
 			else
 			{
-				SSL *ssl_temp = all_slaves.is_exist(storage);
-				if(ssl_temp == NULL)
-					strcpy(message, "storage server not connected.\n");
-				else
+				// try to connect to the storage and backup storage.
+				for(int i = 0; i < 2; ++i)
 				{
-					char temp[MAXLINE];
-					snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
-					int x = strlen(temp);
-					if(ssl_writen(ssl_temp, temp, x) != x)
+					SSL *ssl_temp = all_slaves.is_exist(storage[i]);
+					if(ssl_temp == NULL)
 					{
-						log_msg("command_parse: ssl_writen error");
-				 	 	snprintf(message, MAXLINE, "%s download error.\n", arg2);
+						snprintf(message, MAXLINE, "storage server %s not connected.\n", storage[i]);
+						continue;
 					}
 					else
-				 	  	snprintf(message, MAXLINE, "%s start to download.\n", arg2);
-				}   
+					{
+						char temp[MAXLINE];
+						snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
+						int x = strlen(temp);
+						if(ssl_writen(ssl_temp, temp, x) != x)
+						{
+							log_msg("command_parse: ssl_writen error");
+							snprintf(message, MAXLINE, "%s download from %s error.\n", arg2, storage[i]);
+						}
+						else
+						{
+							snprintf(message, MAXLINE, "%s start to download from %s.\n", arg2, storage[i]);
+							break;
+						}
+					}
+				}
 			}
 		}
 		int len = strlen(message);
@@ -217,31 +227,43 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			strcpy(message, "not signed in.\n");
 		else
 		{
-			char storage[MAXLINE];
-			int k = iter->second->query_file_storage(arg1, storage);
+			char storage[2][MAXLINE];
+			int k = iter->second->query_file_storage(arg1, storage[0], storage[1]);
 			if(k == FILE_NOT_EXIST) // the file not exist in the database.
 				strcpy(message, "file not exist.\n");
 			else
 			{
-				SSL * ssl_temp = all_slaves.is_exist(storage);
-				if( ssl_temp == NULL) // the very slave server is not connected.
-					strcpy(message, "storage server not connected.\n");
-				else
+				bool success = false;
+				for(int i = 0; i < 2; ++i)
 				{
-					char temp[MAXLINE]; 
-					snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
-					int x = strlen(temp);
-					if(ssl_writen(ssl_temp, temp, x) != x) // send the slave server the message to delete a file.
+					SSL *ssl_temp = all_slaves.is_exist(storage[i]); 
+					if(ssl_temp == NULL) // the very slav is not connected.
 					{
-						log_msg("command_parse: ssl_writen error");
-				 	  	snprintf(message, MAXLINE, "%s delete error.\n", arg1);
+						snprintf(message, MAXLINE, "storage server %s not connected.\n", storage[i]);
+						continue;
 					}
 					else
 					{
-					  	snprintf(message, MAXLINE, "%s deleted.\n", arg1);
-						iter->second->delete_file(arg1); 
-				  	 } 
-				}    
+						char temp[MAXLINE];
+						snprintf(temp, MAXLINE, "%s %s", command_line, iter->second->get_clientname());
+						int x = strlen(temp);
+						if(ssl_writen(ssl_temp, temp, x) != x) // send the slave server the message to delete a file
+						{
+							log_msg("command_parse: ssl_write error");
+							snprintf(message, MAXLINE, "%s delete error.\n", arg1);
+						}
+						else
+						{
+							success = true;
+						    log_msg("%s from %s deleted.\n", arg1, storage[i]);
+						}
+					}
+				}
+				iter->second->delete_file(arg1);
+		        if(success)
+			       snprintf(message, MAXLINE, "%s deleted successfully\n", arg1);
+		        else
+			       snprintf(message, MAXLINE, "%s deleted unsuccessfully\n", arg2);
 			}
 		}
 		int len = strlen(message);
