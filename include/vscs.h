@@ -31,6 +31,9 @@
 #include  <openssl/ssl.h>
 #include  <openssl/err.h>
 
+// for sha1
+#include  <openssl/sha.h>
+
 #include  <string>
 // for hash set.
 #include  <unordered_map>
@@ -154,4 +157,9 @@ int ssl_writen(SSL *, const void *vptr, int n);
 
 // high resolution sleep
 void sleep_us(unsigned int nusecs);
+
+//if success, return the verficiation of the file, otherwise return NULL.
+//remember to release the memory the return pointer point to.
+char *file_verify(const char *file_name);
+
 #endif /* VSCS_H */
