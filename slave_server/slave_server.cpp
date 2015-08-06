@@ -124,12 +124,14 @@ int main(int argc, char *argv[])
 {
 	// read the configure to configure client download port, client upload port, slave port
 	// slave status port ssl certificate, and ssl key.
+	sleep_us(500000);
 	if(slave_configure(slave_port, slave_status_port, backup_port, client_transmit_port,
 				 slave_listen_port, ssl_certificate, ssl_key, store_dir) == -1)
 		err_quit("%-60s[\033[;31mFAILED\033[0m]", "slave server configure");
 	printf("%-60s[\033[;32mOK\033[0m]\n", "slave server configure");
 
 	// initialize the SSL
+	sleep_us(500000);
 	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
 		err_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL server initialize");
@@ -137,7 +139,7 @@ int main(int argc, char *argv[])
 	if(ctx_client == NULL)
 		log_quit("%-60s[\033[;31mFAILED\033[0m]", "SSL client initialize");
 
-	log_msg("%-060s[\033[;32mOK\033[0m]\n", "SSL initialize");
+	printf("%-60s[\033[;32mOK\033[0m]\n", "SSL initialize");
 
 	//iniitialize the mutex.
 	pthread_mutex_init(&download_mutex, NULL);

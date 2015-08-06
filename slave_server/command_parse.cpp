@@ -159,9 +159,9 @@ void *upload_thread(void *command_line)
 {
 	 log_msg("upload_thread: %s start", command_line);
 	char ip_addr[MAXLINE], file_name[MAXLINE], user_name[MAXLINE];
-	char backup_addr[MAXLINE];
+	char backup_addr[2][MAXLINE];
 	//get the ip address user name, and file name of the client.
-	int n = sscanf((char *)command_line, "%s%s%s%s", ip_addr, file_name, user_name, backup_addr);
+	int n = sscanf((char *)command_line, "%s%s%s%s%s", ip_addr, file_name, user_name, backup_addr[0], backup_addr[1]);
 	if(n < 3)
 	{
 		free(command_line);
@@ -170,8 +170,14 @@ void *upload_thread(void *command_line)
 	}
 	else if(n == 3)
 	{
-		*backup_addr = '\0';
+		*backup_addr[0] = '\0';
+		*backup_addr[1] = '\0';
 		log_msg("upload_thread: no backup address");
+	}
+	else if(n == 4)
+	{
+		*backup_addr[1] = '\0';
+		log_msg("upload_thread: one backup address");
 	}
 	else 
 		log_msg("upload_thread: backup address %s", backup_addr);
@@ -230,6 +236,9 @@ void *upload_thread(void *command_line)
 	snprintf(str_buf, MAXBUF, "upload %s", file_name);
 	log_msg("upload_thread: %s", str_buf);
 	int len = strlen(str_buf);
+	/*
+	 * tell the client which file to upload
+	 */
 	if(SSL_write(ssl, str_buf, len) != len)
 	{
 		unlink(file);
@@ -264,53 +273,68 @@ void *upload_thread(void *command_line)
 		return NULL;
 	}
 	long long upload_bytes;
+	/*
+	 * get the upload file's size.
+	 */
 	sscanf(str_buf, "%lld",&upload_bytes);
 	SSL_write(ssl, "OK", strlen("OK"));
 
 	/*
 	 * connect to the backup slave server.
 	 */
-	int backup_fd = -1;
-	if(*backup_addr !='\0')
-	    backup_fd = client_connect(backup_addr, backup_port);
-	if(backup_fd >= 0)
+	int backup_fd[2];
+	backup_fd[0] = -1;
+	backup_fd[1] = -1;
+	for(int i = 0; i < 2; ++i)
 	{
-		char backup_msg[MAXLINE + 1];
-		snprintf(backup_msg, MAXLINE, "%s %s %lld", file_name, user_name, upload_bytes);
-		int len = strlen(backup_msg);
-		int written = writen(backup_fd, backup_msg, len);
-		if(written != len)
-		{
-			backup_fd = -1;
-			log_ret("upload_thread: writen to backup server error");
-		}
-		else
-		{
-			len = read(backup_fd, backup_msg, MAXLINE);
-			if(len < 0)
-			{
-				backup_fd = -1;
-				log_ret("upload_thread: read from backup server error");
-			}
-			else
-			{
-				backup_msg[len] = '\0';
-				if(strcmp(backup_msg, "OK") != 0)
-				{
-					backup_fd = -1;
-					log_msg("upload_thread: backup strcmp error");
-				}
-			}
-		}
+		if(*backup_addr[i] !='\0')
+	        backup_fd[i] = client_connect(backup_addr[i], backup_port);
+	    else
+	   	   break;
+	    if(backup_fd[i] >= 0)
+	    {
+		    char backup_msg[MAXLINE + 1];
+		    snprintf(backup_msg, MAXLINE, "%s %s %lld", file_name, user_name, upload_bytes);
+		    int len = strlen(backup_msg);
+		    int written = writen(backup_fd[i], backup_msg, len);
+		    if(written != len)
+		    {
+			     backup_fd[i] = -1;
+			     log_ret("upload_thread: writen to backup server error");
+		    }
+		    else
+		    {
+			     len = read(backup_fd[i], backup_msg, MAXLINE);
+			     if(len < 0)
+			     {
+				     backup_fd[i] = -1;
+	 			     log_ret("upload_thread: read from backup server error");
+			     }
+		      	else
+			     {
+	 			      backup_msg[len] = '\0';
+				      if(strcmp(backup_msg, "OK") != 0)
+				      {
+	 				       backup_fd[i] = -1;
+					       log_msg("upload_thread: backup strcmp error");
+				      }
+			     }
+		    }
+	   }
+	   else
+	   {
+		    backup_fd[i] = -1;
+		    log_msg("upload_thread: cannot connect to the backup server %s", backup_addr);
+	   }
 	}
-	else
-	{
-		backup_fd = -1;
-		log_msg("upload_thread: cannot connect to the backup server %s", backup_addr);
-	}
-	if(backup_fd != -1)
-		log_msg("upload_thread: connect to the backup server %s successfully", backup_addr);
-
+	if(backup_fd[0] != -1)
+		log_msg("upload_thread: connect to the backup server %s successfully", backup_addr[0]);
+	else if(backup_addr[0][0] != '\0')
+		log_msg("upload_thread: connect to the backup server %s unsuccessfully", backup_addr[0]);
+	if(backup_fd[1] != -1)
+		log_msg("upload_thread: connect to the backup server %s successfully", backup_addr[1]);
+	else if(backup_addr[1][0] != '\0')
+		log_msg("upload_thread: connect to the backup server %s unsuccessfully", backup_addr[1]);
 	// add the upload job to the upload array.
 	pthread_mutex_lock(&upload_mutex);
 	upload_array.insert((const char *)command_line);
@@ -338,11 +362,14 @@ void *upload_thread(void *command_line)
 		fwrite(str_buf, sizeof(char), nread, p_file);
 
 		// if backup server is connected, write to it.
-		if(backup_fd != -1)
+		for(int i = 0; i < 2; ++i)
 		{
-			int n = writen(backup_fd, str_buf, nread);
-			if(n != nread)
-				log_msg("upload_thread: write to the backup server error");
+			if(backup_fd[i] != -1)
+		  {
+			  int n = writen(backup_fd[i], str_buf, nread);
+			  if(n != nread)
+				   log_msg("upload_thread: write to the backup server error");
+		  }
 		}
 		upload_bytes -= nread;
 	}
