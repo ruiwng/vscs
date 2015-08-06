@@ -139,7 +139,10 @@ int main(int argc, char *argv[])
 	}
 	strcpy(server_address, argv[1]);
 	sleep_us(500000);
-	// configure the client.
+
+	/*
+	 * configure the client.
+	 */
 	if(client_configure(master_port, transmit_port, ssl_certificate, ssl_key) < 0)
 	{
 		printf("%-60s[\033[;31mFAILED\033[0m]\n", "client configured");
@@ -147,7 +150,10 @@ int main(int argc, char *argv[])
 	}
 	printf("%-60s[\033[;32mOK\033[0m]\n", "client configured");
 	sleep_us(500000);
-	// initialize the SSL
+
+	/* 
+	 * initialize the SSL
+	 */
 	ctx_server = ssl_server_init(ssl_certificate, ssl_key);
 	if(ctx_server == NULL)
 	{
@@ -162,7 +168,10 @@ int main(int argc, char *argv[])
 	}
 	printf("%-60s[\033[;32mOK\033[0m]\n", "SSL initialize");
 	sleep_us(500000);
-	// connect to the master server.
+
+	/*
+	 * connect to the master server.
+	 */
 	char temp[MAXLINE];
 	snprintf(temp, MAXLINE, "connect to master server: %s", argv[1]);
 	int masterfd = client_connect(argv[1], master_port);
@@ -185,14 +194,42 @@ int main(int argc, char *argv[])
 		printf("%-60s[\033[;31mFAILED\033[0m]\n", "ssl_client\n");
 		return -1;
 	}
-	int k = SSL_write(ssl, "Hello world!", strlen("Hello world!"));
-	if( k != strlen("Hello world!"))
+
+	/*
+	 * verify the executable client to judge if it's a fake one.
+	 */
+	char *ver_buf = file_verify(argv[0]);
+	if(ver_buf == NULL)
+	{
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "verify client");
+		return -1;
+	}
+	int k = SSL_write(ssl, ver_buf, strlen(ver_buf));
+	if( k != (int)strlen(ver_buf))
 	{
 		printf("SSL_write error\n");
 		return -1;
 	}
-	printf("%-60s[\033[;32mOK\033[0m]\n", "ssl_client");
+	k = SSL_read(ssl, temp, MAXLINE);
+	if(k < 0)
+	{
+		printf("SSL_read error");
+		return -1;
+	}
+	temp[k] = '\0';
+
+	if(strcmp(temp, "verify client unsuccessfully") == 0)
+	{
+		printf("%-60s[\033[;31mFAILED\033[0m]\n", "verify client");
+		return -1;
+	}
+	free(ver_buf);
+
 	sleep_us(500000);
+	
+	/*
+	 * Listen to the transmit port to upload/download files
+	 */
 	snprintf(temp, MAXLINE, "listen to transmit port: %s", transmit_port);
 	int listenfd = server_listen(transmit_port);
 	if(listenfd == -1)
@@ -202,6 +239,11 @@ int main(int argc, char *argv[])
 	}
 	printf("%-60s[\033[;32mOK\033[0m]\n", temp);
 	sleep_us(500000);
+
+	/*
+	 * create transmit_thread to handle upload/download files request 
+	 * from the slave server.
+	 */
 	pthread_t thread;
 	int ret = pthread_create(&thread, NULL, transmit_thread, (void*)listenfd);
 	if(ret == 0)
@@ -211,6 +253,10 @@ int main(int argc, char *argv[])
 		printf("%-60s[\033[;31FAILED\033[0m]\n", "transmit_thread create");
 		return -1;
 	}
+
+	/*
+	 * initialize the download/upload mutex.
+	 */
 	pthread_mutex_init(&download_mutex, NULL);
 	pthread_mutex_init(&upload_mutex, NULL);
 	char command_line[MAXLINE];
