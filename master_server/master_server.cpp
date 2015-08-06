@@ -88,7 +88,9 @@ void *signal_thread(void *arg)
 	return NULL;
 }
 
-// query status of all the servers.
+/*
+ * query status of all the servers.
+ */
 void  *status_query_thread(void *arg)
 {
 	int sockfd = (int)arg;
@@ -103,7 +105,9 @@ void  *status_query_thread(void *arg)
 	snprintf(str, MAXLINE, "master server: %s\n", addr);
 	SSL_write(ssl, str, strlen(str));
 
-	//traverse all the clients.
+	/*
+	 * traverse all the clients.
+	 */
 	for(unordered_map<int, SSL*>::iterator iter = connected_clients.begin();
 			iter != connected_clients.end(); ++iter)
 	{
@@ -118,7 +122,9 @@ void  *status_query_thread(void *arg)
 	}
 
 	vector<string> slaves = all_slaves.get_all_connections();
-	//traverse all the slave servers.
+	/*
+	 * traverse all the slave servers.
+	 */
 	for(vector<string>::iterator iter = slaves.begin();
 			iter != slaves.end(); ++iter)
 	{
@@ -151,7 +157,9 @@ void  *status_query_thread(void *arg)
 		close(slave_socket);
 		SSL_free(ssl_slave);
 	}
-	// terminate the connection to the query socket.
+	/*
+	 * terminate the connection to the query socket.
+	 */
 	SSL_shutdown(ssl);
 	close(sockfd);  // close the status socket.
 	SSL_free(ssl);
@@ -168,12 +176,13 @@ int main(int argc, char *argv[])
 	}
 	sleep_us(500000);
 
+	char client_directory[MAXLINE];
 	//read the configure file to get redis adress, redis port, slave server array,
 	//port of the slave server, port of the master server, status port of slave server
 	//status port of master server, certificate of ssl and private key of ssl.
 	if(master_configure(redis_address, redis_port, slave_array, slave_port,
  				master_port,  slave_status_port, master_status_port, slave_listen_port, ssl_certificate,
- 				ssl_key ) == -1) 
+ 	 			ssl_key, client_directory) == -1) 
 		err_quit("%-60s[\033[;31mFAILED\033[0m]", "master server configure");
 
 	printf("%-60s[\033[;32mOK\033[0m]\n", "master server configure");
@@ -216,6 +225,12 @@ int main(int argc, char *argv[])
 	if((err = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0)
 		log_sys("pthread_sigmask failed");
 
+	/*
+	 * get the SHA1 check sum of the client.
+	 */
+	char *ver_client = file_verify(client_directory);
+	if(ver_client == NULL)
+		log_sys("get file %s's SHA1 checksum unsuccessfully");
 	/*
 	 * connect to the redis database server.
 	 */
@@ -265,7 +280,7 @@ int main(int argc, char *argv[])
 	int statusfd = server_listen(master_status_port);
 	if(statusfd == -1)
 		log_quit("listen to %s status port unsuccessfully", master_status_port);
-	log_msg("listen to %s status port", master_status_port);
+	log_msg("listen to %s status port successfully", master_status_port);
 
 	/*
 	 * listen to a new connection to be a slave server.
@@ -326,30 +341,49 @@ int main(int argc, char *argv[])
 			sockaddr_in client_addr;
 			socklen_t len = sizeof(client_addr);
 			memset(&client_addr, 0, len);
-			char dst[MAXLINE];// the address of the conenected client.
+			char dst[MAXLINE + 1];// the address of the conenected client.
 			int clientfd = accept(listenfd, (sockaddr*)&client_addr,&len);
-            if(clientfd < 0)
+			if(clientfd >= 0)
 			{
-	 			log_ret("accept error");
-	 			continue; 
+				if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
+					log_msg("client %s was connected", dst);
+				SSL *ss = ssl_server(ctx_server, clientfd);
+				if(ss != NULL)
+				{
+					int x = SSL_read(ss, dst, MAXLINE);
+					dst[x] = '\0';
+					if(strcmp(dst, ver_client) == 0)
+					{
+						log_msg("SSA1 check sum %s", dst);
+						//verify the client successfully.
+						// add it to the connected clients.
+						connected_clients.insert(make_pair(clientfd, ss));
+						FD_SET(clientfd, &allset); // add the new connection to the set.
+						if(clientfd > maxfd)
+							maxfd = clientfd;
+						const char *temp = "verify client successfully";
+						size_t n = SSL_write(ss, temp, strlen(temp));
+						if(n != strlen(temp))
+							log_msg("SSL_write error");
+					}
+					else
+					{
+						// ver fiy the client unsuccessfully.
+						// terminate the connection to the client. shutdown SSL and close socket descriptor.
+						const char *temp = "verify client unsuccessfully";
+						size_t n = SSL_write(ss, temp, strlen(temp));
+						if(n != strlen(temp))
+							log_msg("SSL_write error");
+						SSL_shutdown(ss);
+						close(clientfd);
+						SSL_free(ss);
+					}
+				}
+				else
+					log_ret("ssl_server error");
 			}
-			if(inet_ntop(AF_INET,&client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
-				log_msg("client %s was connected", dst);
-			SSL *ss = ssl_server(ctx_server, clientfd);
-			int x = SSL_read(ss, dst, MAXLINE);
-			if(x < 0)
-				log_sys("SSL_read error");
-			dst[x] = '\0';
-			log_msg("%s", dst);
-			if(ss != NULL)
-			{
-	 			connected_clients.insert(make_pair(clientfd, ss));
-				FD_SET(clientfd, &allset); // add the new connection to the set.
-				if(clientfd > maxfd)
- 	  				maxfd  = clientfd; 
-			}
-			else 
-				log_msg("ssl_server error");
+			else
+				log_ret("accept error");
 			--nready;
 		}
 		if(nready == 0)
@@ -404,7 +438,6 @@ int main(int argc, char *argv[])
 				if(n < 0)
 					n = 0;
 				message[n] = '\0';
-				log_msg("%s", message);
 				all_msgs.push_msg(iter->first, iter->second, message);// push the message to the message queue.
 				// the connection was terminted. so close the file descriptor.
 				if(n == 0 || strcmp(message, "exit") == 0)

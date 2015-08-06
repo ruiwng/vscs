@@ -16,10 +16,12 @@
 
 struct connection
 {
+	connection():sockfd(0), address(), ssl(NULL),backup1(), backup2(){}
 	int sockfd; // the connected sockfd.
 	string address; // the ip address corresponding to the connected socket.
 	SSL *ssl;// the ssl correspodning to the connected socket.
-	string next_address;// the backup ip address.
+	string backup1;// the first backup ip address.
+	string backup2; // the second backup ip address.
 };
 
 class connected_slaves

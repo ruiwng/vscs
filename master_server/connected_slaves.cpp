@@ -104,10 +104,18 @@ connection connected_slaves::get_a_connection()
 	result.address = current_pos->first;
 	if(++ current_pos == slaves.end())
 		current_pos = slaves.begin();
-	if(slaves.size() != 1)
-		result.next_address = current_pos->first;
-	else
-		result.next_address = "";
+
+	if(slaves.size() > 1) // get the first backup address.
+		result.backup1 = current_pos->first;
+	
+	// get the second file backup address.
+	if(slaves.size() > 2)
+	{
+		unordered_map<string, info>::iterator iter_temp = current_pos;
+		if(++ iter_temp == slaves.end())
+			iter_temp = slaves.begin();
+		result.backup2 = iter_temp->first;
+	}
 
 	// unlock the slaves.
 	pthread_mutex_unlock(&slave_mutex);

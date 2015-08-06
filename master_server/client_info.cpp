@@ -19,12 +19,12 @@ client_info::~client_info()
 }
 
 //add a file correpsonding to the current user.
-int client_info::add_file(const char *name, long long file_size,const char *storage1, const char *storage2)
+int client_info::add_file(const char *name, long long file_size,const char *storage1, const char *storage2, const char *storage3)
 {
 	unordered_map<string,info>::iterator iter = file_storage.find(name);
 	if(iter != file_storage.end())
 		return FILE_ALREADY_EXIST;
-	file_storage.insert(make_pair(name, info(file_size, storage1, storage2)));
+	file_storage.insert(make_pair(name, info(file_size, storage1, storage2, storage3)));
 	return OK;
 }
 
@@ -75,13 +75,18 @@ void client_info::get_filelist()
 	}
 	p_mem[str_length] = '\0';
 
-	char file_name[MAXLINE], storage1[MAXLINE], storage2[MAXLINE];
+	char file_name[MAXLINE], storage1[MAXLINE], storage2[MAXLINE], storage3[MAXLINE];
 	long long file_size;
-	while((n = sscanf(p_mem, "%s %lld %s %s", file_name, &file_size, storage1, storage2)) >= 3)
+	while((n = sscanf(p_mem, "%s %lld %s %s %s", file_name, &file_size, storage1, storage2, storage3)) >= 3)
 	{
 		if(n == 3)
+		{
 			storage2[0] = '\0';
-		file_storage.insert(make_pair(file_name,info(file_size, storage1, storage2)));
+			storage3[0] = '\0';
+		}
+		else if(n == 4)
+			storage3[0] = '\0';
+		file_storage.insert(make_pair(file_name,info(file_size, storage1, storage2, storage3)));
 		p_mem = strchr(p_mem,'\n');
 		if(p_mem == NULL)
 			break;
@@ -125,18 +130,22 @@ int client_info::restore_filelist() const
 }
 
 // get the storage of the current file.
-int client_info::query_file_storage(const char *file_name, char *storage1, char *storage2) const
+int client_info::query_file_storage(const char *file_name, char *storage1, char *storage2, char *storage3) const
 {
 	unordered_map<string,info>::const_iterator iter = file_storage.find(file_name);
 	if(iter == file_storage.end())
 		return FILE_NOT_EXIST;
+	// get the first storage.
 	strcpy(storage1, iter->second.storage1.c_str());
+	// get the second storage.
 	strcpy(storage2, iter->second.storage2.c_str());
+	// get the third storage.
+	strcpy(storage3, iter->second.storage3.c_str());
 	return OK;
 }
 
 //show the file list of the current user.
-//remember to free the stoarge after useage.
+//remember to free the stoarge after usage.
 char *client_info::show_filelist() const
 {
 	string result;

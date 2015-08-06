@@ -21,7 +21,8 @@ struct info
 	long long file_size;
 	string storage1;
 	string storage2;
-	info(long long size, const string& stor1, const string& stor2):file_size(size), storage1(stor1), storage2(stor2){}
+	string storage3;
+	info(long long size, const string& stor1, const string& stor2, const string& stor3):file_size(size), storage1(stor1), storage2(stor2), storage3(stor3){}
 };
 public:
 	client_info(int sockdb,const char *name);
@@ -29,7 +30,7 @@ public:
 
 public:
 	//add a file correspending to the current user.
-	int add_file(const char *file_name, long long file_size, const char *storage1, const char *storage2);
+	int add_file(const char *file_name, long long file_size, const char *storage1, const char *storage2, const char *storage3);
 	//delete a file corresponding to the current user.
 	int delete_file(const char *file_name);
 	//show the file list of the current user.
@@ -40,7 +41,7 @@ public:
 	{
 		return file_storage.find(name) != file_storage.end();
 	}
-	int query_file_storage(const char *name, char *storage1, char *storage2) const;
+	int query_file_storage(const char *name, char *storage1, char *storage2, char *storage3) const;
 	const char *get_clientname() const {return client_name.c_str();}
 
 private:

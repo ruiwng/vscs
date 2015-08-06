@@ -135,7 +135,6 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			strcpy(sendbuf, q);
 			strcat(sendbuf, p);
 			free(p);
-			log_msg("command_line: sendbuf: %s", sendbuf);
 			if(ssl_writen(ssl, sendbuf, len) != len)
 				log_msg("command_parse: ssl_writen error");
 			free(sendbuf);
@@ -154,7 +153,7 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 		{
 			connection store = all_slaves.get_a_connection();
 			char temp[MAXLINE];
-			snprintf(temp, MAXLINE, "upload %s %s %s %s", arg1, arg2, iter->second->get_clientname(), store.next_address.c_str());
+			snprintf(temp, MAXLINE, "upload %s %s %s %s %s", arg1, arg2, iter->second->get_clientname(), store.backup1.c_str(), store.backup2.c_str());
 			int x = strlen(temp);
 			if(ssl_writen(store.ssl, temp, x) != x) // ssl_writen error
 			{
@@ -163,7 +162,7 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			}
 			else
 			{
-			    iter->second->add_file(arg2, arg3, store.address.c_str(), store.next_address.c_str());
+			    iter->second->add_file(arg2, arg3, store.address.c_str(), store.backup2.c_str(), store.backup2.c_str());
 				snprintf(message, MAXLINE, "%s start to upload.\n", arg2);
 			}
 		}
@@ -180,15 +179,17 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			strcpy(message, "not signed in.\n");
 		else
 		{
-			char storage[2][MAXLINE];
-			int k = iter->second->query_file_storage(arg2, storage[0], storage[1]);
+			char storage[3][MAXLINE];
+			int k = iter->second->query_file_storage(arg2, storage[0], storage[1], storage[2]);
 			if(k == FILE_NOT_EXIST)
 				strcpy(message, "file not exist.\n");
 			else
 			{
 				// try to connect to the storage and backup storage.
-				for(int i = 0; i < 2; ++i)
+				for(int i = 0; i < 3; ++i)
 				{
+					if(storage[0] == '\0')
+						break;
 					SSL *ssl_temp = all_slaves.is_exist(storage[i]);
 					if(ssl_temp == NULL)
 					{
@@ -202,7 +203,7 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 						int x = strlen(temp);
 						if(ssl_writen(ssl_temp, temp, x) != x)
 						{
-							log_msg("command_parse: ssl_writen error");
+							log_msg(" command_parse: ssl_writen error");
 							snprintf(message, MAXLINE, "%s download from %s error.\n", arg2, storage[i]);
 						}
 						else
@@ -210,8 +211,8 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 							snprintf(message, MAXLINE, "%s start to download from %s.\n", arg2, storage[i]);
 							break;
 						}
-					}
-				}
+				 	}
+				} 
 			}
 		}
 		int len = strlen(message);
@@ -227,15 +228,17 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 			strcpy(message, "not signed in.\n");
 		else
 		{
-			char storage[2][MAXLINE];
-			int k = iter->second->query_file_storage(arg1, storage[0], storage[1]);
+			char storage[3][MAXLINE];
+			int k = iter->second->query_file_storage(arg1, storage[0], storage[1], storage[2]);
 			if(k == FILE_NOT_EXIST) // the file not exist in the database.
 				strcpy(message, "file not exist.\n");
 			else
 			{
 				bool success = false;
-				for(int i = 0; i < 2; ++i)
+				for(int i = 0; i < 3; ++i)
 				{
+					if(storage[i] == '\0')
+						break;
 					SSL *ssl_temp = all_slaves.is_exist(storage[i]); 
 					if(ssl_temp == NULL) // the very slav is not connected.
 					{
@@ -256,7 +259,7 @@ void command_parse(int sockfd, SSL *ssl,const char *command_line)
 						{
 							success = true;
 						    log_msg("%s from %s deleted.\n", arg1, storage[i]);
-						}
+						} 
 					}
 				}
 				iter->second->delete_file(arg1);
