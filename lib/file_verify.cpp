@@ -22,6 +22,7 @@ char *hexstr(unsigned char *buf)
 	return str;
 }
 
+
 //if success, return the verification, otherwise return NULL.
 //remember to release the memory the return pointer point to.
 char *file_verify(const char *file_name)
