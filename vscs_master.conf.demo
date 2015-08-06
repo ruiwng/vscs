@@ -11,3 +11,4 @@ MASTER_STATUS_PORT 8992
 SLAVE_LISTEN_PORT 8994
 SSL_CERTIFICATE  /home/ruiwng/openssl_test/cacert.pem
 SSL_KEY    /home/ruiwng/openssl_test/privatekey.pem
+CLIENT_DIRECTORY /home/ruiwng/ruiwng/vscs/client/vscs_client
