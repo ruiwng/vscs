@@ -230,6 +230,7 @@ int main(int argc, char *argv[])
 	/*
 	 * Listen to the transmit port to upload/download files
 	 */
+	
 	snprintf(temp, MAXLINE, "listen to transmit port: %s", transmit_port);
 	int listenfd = server_listen(transmit_port);
 	if(listenfd == -1)
@@ -239,11 +240,12 @@ int main(int argc, char *argv[])
 	}
 	printf("%-60s[\033[;32mOK\033[0m]\n", temp);
 	sleep_us(500000);
-
+	
 	/*
 	 * create transmit_thread to handle upload/download files request 
 	 * from the slave server.
 	 */
+	
 	pthread_t thread;
 	int ret = pthread_create(&thread, NULL, transmit_thread, (void*)listenfd);
 	if(ret == 0)
@@ -253,7 +255,7 @@ int main(int argc, char *argv[])
 		printf("%-60s[\033[;31FAILED\033[0m]\n", "transmit_thread create");
 		return -1;
 	}
-
+	
 	/*
 	 * initialize the download/upload mutex.
 	 */
