@@ -102,7 +102,7 @@ void  *status_query_thread(void *arg)
 	memset(&servaddr, 0, len);
 	getsockname(sockfd, (sockaddr*)&servaddr, &len);
 	char addr[MAXLINE+1];
-	inet_ntop(AF_INET, (void *)&servaddr.sin_addr, addr, MAXLINE);
+	inet_ntop(AF_INET, (void *)&servaddr.sin_addr.s_addr, addr, MAXLINE);
 	char str[MAXLINE+1];
 	snprintf(str, MAXLINE, "master server: %s\n", addr);
 	SSL_write(ssl, str, strlen(str));
@@ -116,8 +116,8 @@ void  *status_query_thread(void *arg)
 		sockaddr_in clientaddr;
 		len = sizeof(clientaddr);
 		memset(&clientaddr, 0, len);
-		getpeername(sockfd, (sockaddr*)&clientaddr, &len);
-		inet_ntop(AF_INET, (void *)&clientaddr.sin_addr, addr, MAXLINE);
+		getpeername(iter->first, (sockaddr*)&clientaddr, &len);
+		inet_ntop(AF_INET, &clientaddr.sin_addr.s_addr, addr, MAXLINE);
 		char str[MAXLINE+1];
 		snprintf(str, MAXLINE,"client %s connected\n", addr);
 		SSL_write(ssl, str, strlen(str));
