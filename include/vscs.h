@@ -23,6 +23,8 @@
 #include  <netdb.h>    /* inclusion for getaddrinfo */
 #include  <fcntl.h>  /* for open and fcntl */
 #include  <sys/ioctl.h> /* for ioctl */
+#include  <sys/epoll.h>
+
 //for ssl
 #include  <openssl/rsa.h>
 #include  <openssl/crypto.h>
@@ -162,4 +164,6 @@ void sleep_us(unsigned int nusecs);
 //remember to release the memory the return pointer point to.
 char *file_verify(const char *file_name);
 
+// set the file descriptor to nonblocking state.
+int setnonblocking(int sockfd);
 #endif /* VSCS_H */
