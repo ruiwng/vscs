@@ -14,6 +14,8 @@
 #include  <string>
 using namespace std;
 
+#define    MAX_EVENTS               10
+
 char redis_address[MAXLINE];// address of the redis database server
 char redis_port[MAXLINE];// port of the redis database server
 int sockdb; // the socket descriptor connected to the redis database server.
@@ -266,6 +268,11 @@ int main(int argc, char *argv[])
 	     log_quit("no slave server available");
 	all_slaves.init();
 
+   /*
+   * Create the epollfd
+   */
+   struct epoll_event ev, events[MAX_EVENTS];
+   int epollfd = epoll_create(10);
 	/*
 	 * listen to the clients' connection
 	 */
@@ -273,7 +280,14 @@ int main(int argc, char *argv[])
 	if(listenfd == -1)
 		log_quit("listen to the %s port unsuccessfully", master_port);
 	log_msg( "listen to %s port successfully", master_port);
-
+	
+	/* add listenfd to epoll set*/
+	setnonblocking(listenfd);
+	ev.events = EPOLLIN | EPOLLET;
+	ev.data.fd = listenfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &ev) == -1)
+		log_quit("add listenfd to epoll unsuccessfully");
+		
 	/*
 	 * listen to status  port
 	 */
@@ -281,7 +295,15 @@ int main(int argc, char *argv[])
 	if(statusfd == -1)
 		log_quit("listen to %s status port unsuccessfully", master_status_port);
 	log_msg("listen to %s status port successfully", master_status_port);
+	
+	/* add statusfd to epoll set */
+	setnonblocking(statusfd);
+	ev.events = EPOLLIN | EPOLLET;
+	ev.data.fd = statusfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, statusfd, &ev) == -1)
+		log_quit("add statusfd to epoll unsuccessfully");
 
+	
 	/*
 	 * listen to a new connection to be a slave server.
 	 */
@@ -289,7 +311,14 @@ int main(int argc, char *argv[])
 	if(slave_listenfd == -1)
 		log_quit("listen to %s slave listen port unsuccessfully", slave_listen_port);
 	log_msg("listen to %s slave listen port successfully", slave_listen_port);
-
+	
+	/* add slave_listenfd to epoll set */
+	setnonblocking(slave_listenfd);
+	ev.events = EPOLLIN | EPOLLET;
+	ev.data.fd = slave_listenfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, slave_listenfd, &ev) == -1)
+		log_quit("add slave_listenfd to epoll unsuccessfully");
+		
 	/*
 	 * create the message handler thread to handler new message.
 	 */
@@ -310,24 +339,11 @@ int main(int argc, char *argv[])
 		log_msg("signal_thread create successfully");
 
 	/*
-	 * wait for the connection of listenfd and statusfd.
+	 * wait for the connection of listenfd, statusfd and slave_listenfd.
 	 */
-	fd_set rset, allset;
-	int maxfd = listenfd;
-	if(maxfd < statusfd)//get the maximum file descriptor
-		maxfd = statusfd;
-	if(maxfd < slave_listenfd)
-		maxfd = slave_listenfd;
-
-	FD_ZERO(&allset); // initialize fd_set
-	FD_SET(listenfd, &allset);
-	FD_SET(statusfd, &allset);
-	FD_SET(slave_listenfd, &allset);
-
 	while(!stop)
 	{
-		rset = allset; // structure assignment 
-		int  nready = select(maxfd+1, &rset, NULL, NULL, NULL);
+		int  nready = epoll_wait(epollfd, events, MAX_EVENTS, -1);
 		if(nready < 0)
 		{
 			if(errno == EINTR)
@@ -335,131 +351,125 @@ int main(int argc, char *argv[])
 			else
 				log_sys("select error");
 		}
-		if(FD_ISSET(listenfd, &rset)) //a new client connected
+		for(int i = 0; i < nready; ++i)
 		{
-			// accept the request from the client
-			sockaddr_in client_addr;
-			socklen_t len = sizeof(client_addr);
-			memset(&client_addr, 0, len);
-			char dst[MAXLINE + 1];// the address of the conenected client.
-			int clientfd = accept(listenfd, (sockaddr*)&client_addr,&len);
-			if(clientfd >= 0)
+			if(events[i].data.fd == listenfd) // a new client connected
 			{
-				if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
-					log_msg("client %s was connected", dst);
-				SSL *ss = ssl_server(ctx_server, clientfd);
-				if(ss != NULL)
-				{
-					int x = SSL_read(ss, dst, MAXLINE);
-					dst[x] = '\0';
-					if(strcmp(dst, ver_client) == 0)
+				 //accept  the request from the client
+				 sockaddr_in client_addr;
+				 socklen_t len = sizeof(client_addr);
+				 memset(&client_addr, 0, len);
+				 char dst[MAXLINE + 1]; // the address of the connected client.
+				 int clientfd = accept(listenfd, (sockaddr*)&client_addr, &len);
+				 if(clientfd >= 0)
+		   	 {
+				   if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, dst, MAXLINE) != NULL)
+					   log_msg("client %s was connected", dst);
+				   SSL *ss = ssl_server(ctx_server, clientfd);
+				   if(ss != NULL)
+				   {
+					   int x = SSL_read(ss, dst, MAXLINE);
+					   dst[x] = '\0';
+					   if(strcmp(dst, ver_client) == 0)
+					   {
+						    log_msg("SSA1 check sum %s", dst);
+						    //verify the client successfully.
+						    // add it to the connected clients.
+						    connected_clients.insert(make_pair(clientfd, ss));
+						    setnonblocking(clientfd);
+						    // add the new connection to the set.
+						    ev.events = EPOLLIN | EPOLLET;
+						    ev.data.fd = clientfd;
+						    if(epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev) == -1)
+						    	log_quit("epoll_ctl: add clientfd unsuccessfully");
+						    	
+						    const char *temp = "verify client successfully";
+						    size_t n = SSL_write(ss, temp, strlen(temp));
+						    if(n != strlen(temp))
+							      log_msg("SSL_write error");
+					    }
+					    else
+					    {
+						     // ver fiy the client unsuccessfully.
+						     // terminate the connection to the client. shutdown SSL and close socket descriptor.
+						     const char *temp = "verify client unsuccessfully";
+						     size_t n = SSL_write(ss, temp, strlen(temp));
+						     if(n != strlen(temp))
+							      log_msg("SSL_write error");
+						     SSL_shutdown(ss);
+						     close(clientfd);
+						     SSL_free(ss);
+					    }
+				    }
+				    else
+					    log_ret("ssl_server error");
+			     }
+			     else
+				      log_ret("accept error");
+			}
+			else if(events[i].data.fd == statusfd) // the status of the cluster.
+			{
+				 // accept the request from the master server.
+				 int masterfd = accept(statusfd, NULL, NULL);
+				 pthread_create(&thread, NULL, status_query_thread, (void *)masterfd);
+			}
+			else if(events[i].data.fd == slave_listenfd) // a new connection to be a slave server.
+			{
+				// accept the request from a connection as a slave.
+				sockaddr_in slave_addr;
+				socklen_t len = sizeof(slave_addr);
+				memset(&slave_addr, 0, sizeof(slave_addr));
+				int slavefd = accept(slave_listenfd, (sockaddr*)&slave_addr, &len);
+				
+				// get the ip address of the peer connection.
+				char ip_address[MAXLINE];
+				inet_ntop(AF_INET, (void *)&slave_addr.sin_addr, ip_address, MAXLINE);
+				
+				SSL *ssl_temp = ssl_server(ctx_server, slavefd);
+				if(ssl_temp == NULL)
+			  {
+				   log_msg("a new slave server established unsuccessfully");
+			  }
+			  else
+			  {
+				  // add a new slave server to the slave connections.
+				  all_slaves.add_a_connection(ip_address, slavefd, ssl_temp);
+			  }
+			}
+			else // client is available
+			{
+					unordered_map<int, SSL *>::iterator iter = connected_clients.find(events[i].data.fd);
+					if(iter != connected_clients.end())
 					{
-						log_msg("SSA1 check sum %s", dst);
-						//verify the client successfully.
-						// add it to the connected clients.
-						connected_clients.insert(make_pair(clientfd, ss));
-						FD_SET(clientfd, &allset); // add the new connection to the set.
-						if(clientfd > maxfd)
-							maxfd = clientfd;
-						const char *temp = "verify client successfully";
-						size_t n = SSL_write(ss, temp, strlen(temp));
-						if(n != strlen(temp))
-							log_msg("SSL_write error");
+						char message[MAXLINE + 1];
+						int n;
+						while((n = SSL_read(iter->second, message, MAXLINE)) < 0)
+						{
+								if(n < 0 && errno == EINTR)
+									continue;
+						}
+						if(n < 0)
+							n = 0;
+						message[n] = '\0';
+						all_msgs.push_msg(iter->first, iter->second, message); // push the message to the message queue.
+						// the connection was terminated. so close the file descriptor.
+						if(n == 0 || strcmp(message, "exit") == 0)
+						{
+							 epoll_ctl(epollfd, EPOLL_CTL_DEL, events[i].data.fd, NULL);
+							 connected_clients.erase(iter);
+						}
 					}
 					else
-					{
-						// ver fiy the client unsuccessfully.
-						// terminate the connection to the client. shutdown SSL and close socket descriptor.
-						const char *temp = "verify client unsuccessfully";
-						size_t n = SSL_write(ss, temp, strlen(temp));
-						if(n != strlen(temp))
-							log_msg("SSL_write error");
-						SSL_shutdown(ss);
-						close(clientfd);
-						SSL_free(ss);
-					}
-				}
-				else
-					log_ret("ssl_server error");
+						log_msg("can't find the relative SSL handle to  a socket");
 			}
-			else
-				log_ret("accept error");
-			--nready;
-		}
-		if(nready == 0)
-			continue;
-		if(FD_ISSET(statusfd, &rset)) // the status of all the servers.
-		{
-			//accept the request from the master server.
-			int masterfd = accept(statusfd, NULL, NULL);
-			pthread_create(&thread, NULL, status_query_thread, (void *)masterfd);
-			--nready;
-		}
-		if(nready == 0)
-			continue;
-		
-		if(FD_ISSET(slave_listenfd, &rset)) // a new connection to be a slave server.
-		{
-			// accept the request from a connection as a slave.
-			sockaddr_in slave_addr;
-			socklen_t len = sizeof(slave_addr);
-			memset(&slave_addr, 0, sizeof(slave_addr));
-			int slavefd = accept(slave_listenfd, (sockaddr*)&slave_addr, &len);
-
-			// get the ip address of the peer connection.
-			char ip_address[MAXLINE];
-			inet_ntop(AF_INET, (void *)&slave_addr.sin_addr, ip_address, MAXLINE);
-
-			SSL *ssl_temp = ssl_server(ctx_server, slavefd);
-			if(ssl_temp == NULL)
-			{
-				log_msg("a new slave server established unsuccessfully");
-			}
-			else
-			{
-				// add a new slave server to the slave connections.
-				all_slaves.add_a_connection(ip_address, slavefd, ssl_temp);
-			}
-		}
-
-		// traverse all the connected clients to see whether they are ready.	
-		for(unordered_map<int, SSL *>::iterator iter = connected_clients.begin();
-				iter != connected_clients.end();)
-		{
-			if(FD_ISSET(iter->first, &rset))
-			{
-				char  message[MAXLINE+1];
-				int n;
-				while((n = SSL_read(iter->second, message, MAXLINE)) < 0)
-				{
-					if(n < 0 && errno == EINTR)
-						continue;
-				}
-				if(n < 0)
-					n = 0;
-				message[n] = '\0';
-				all_msgs.push_msg(iter->first, iter->second, message);// push the message to the message queue.
-				// the connection was terminted. so close the file descriptor.
-				if(n == 0 || strcmp(message, "exit") == 0)
-				{
-					FD_CLR(iter->first, &allset);
-					unordered_map<int, SSL *>::iterator iter_temp = iter++;
- 	  				connected_clients.erase(iter_temp);
-				}
-				else
-					++iter;
-				// no ready clients anymore
-				if(--nready == 0)
- 	  				break;   
-			}
-			else
-				++iter;
 		}
 	}
+	
 	close(listenfd);
 	close(statusfd);
 	close(slave_listenfd);
-
+	close(epollfd);
+	
 	SSL_CTX_free(ctx_server);
 	SSL_CTX_free(ctx_client);
 	exit(0);
