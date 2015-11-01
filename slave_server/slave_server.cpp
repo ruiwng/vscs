@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
 		{
 			int *temp = (int *)malloc(sizeof(int));
 			*temp = master;
-			pthread_create(&thread, NULL, master_connect_thread, (void *)temp);
+			pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(temp));
 		}
 		else
 			log_msg("cannot connect to master server %s", argv[i]);
@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
 			{
 				int *temp = (int *)malloc(sizeof(int));
 				*temp = masterfd;
-			    pthread_create(&thread, NULL, master_connect_thread, (void *)temp);
+			    pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(temp));
 			}
 			-- nready;
 		}

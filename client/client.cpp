@@ -35,7 +35,8 @@ unordered_map<string, record> upload_array;
 // accept transmit request from the slave server.
 void *transmit_thread(void *arg)
 {
-	int transmitfd = (int)arg;
+	int transmitfd = *static_cast<int*>(arg);
+	delete static_cast<int*>(arg);
 	pthread_t thread;
 	// accept the download/upload request from the slave server.
 	while(!stop)
@@ -247,7 +248,7 @@ int main(int argc, char *argv[])
 	 */
 	
 	pthread_t thread;
-	int ret = pthread_create(&thread, NULL, transmit_thread, (void*)listenfd);
+	int ret = pthread_create(&thread, NULL, transmit_thread, static_cast<void*>(new int(listenfd)));
 	if(ret == 0)
 	     printf("%-60s[\033[;32mOK\033[0m]\n", "transmit_thread create");
 	else

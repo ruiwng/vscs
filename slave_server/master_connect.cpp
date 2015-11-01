@@ -20,7 +20,8 @@ void *master_connect_thread(void *arg)
 	memset(&master_addr, 0, len);
 	
 	//get the socket descriptor and free the allcoated memory.
-	int sock_fd = *((int*)arg);
+	int sock_fd = *(static_cast<int*>(arg));
+	delete static_cast<int*>(arg);
 	free(arg);
 
 	char addr[MAXLINE];
