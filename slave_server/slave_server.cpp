@@ -175,9 +175,7 @@ int main(int argc, char *argv[])
 		int master = client_connect(argv[i], slave_listen_port);
 		if(master >= 0)
 		{
-			int *temp = (int *)malloc(sizeof(int));
-			*temp = master;
-			pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(temp));
+			pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(new int(master)));
 		}
 		else
 			log_msg("cannot connect to master server %s", argv[i]);
@@ -219,6 +217,16 @@ int main(int argc, char *argv[])
 	FD_SET(statusfd, &allset);
 	FD_SET(backupfd, &allset);
 
+	/*
+	 * create the signal handler thread.
+	 */
+	err = pthread_create(&thread, NULL, signal_thread, NULL);
+	if(err != 0)
+		log_quit("signal_thread create unsuccessfully");
+	else
+		log_msg("signal_thread create successfully");
+
+
 	while(!stop)
 	{
 		rset = allset; // structure assignment
@@ -238,9 +246,7 @@ int main(int argc, char *argv[])
 				log_msg("slave server accept master error");
 			else
 			{
-				int *temp = (int *)malloc(sizeof(int));
-				*temp = masterfd;
-			    pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(temp));
+			    pthread_create(&thread, NULL, master_connect_thread, static_cast<void *>(new int(masterfd)));
 			}
 			-- nready;
 		}
